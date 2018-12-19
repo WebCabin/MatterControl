@@ -41,6 +41,39 @@ using MatterHackers.MatterControl.HtmlParsing;
 
 namespace MatterHackers.MatterControl
 {
+    public class AboutWindow : SystemWindow
+    {
+        public AboutWindow()
+			: base(500, 640)
+        {
+            
+            GuiWidget aboutPage = new AboutPage();
+            aboutPage.AnchorAll();
+            this.AddChild(aboutPage);
+
+            this.Title = LocalizedString.Get("About MatterControl");
+            this.ShowAsSystemWindow();
+        }
+
+        static AboutWindow aboutWindow = null;
+        public static void Show()
+        {
+            if (aboutWindow == null)
+            {
+                aboutWindow = new AboutWindow();
+                aboutWindow.Closed += (parentSender, e) =>
+                {
+                    aboutWindow = null;
+                };
+            }
+            else
+            {
+                aboutWindow.BringToFront();
+            }
+        }
+    }
+    
+    
     public class AboutPage : GuiWidget
     {
         string htmlContent = null;

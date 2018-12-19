@@ -34,9 +34,8 @@ using MatterHackers.Agg.Font;
 using MatterHackers.Agg.UI;
 using MatterHackers.Agg.VertexSource;
 using MatterHackers.Localizations;
+using MatterHackers.MatterControl.PrinterCommunication;
 using MatterHackers.VectorMath;
-using MatterHackers.MatterControl;
-using MatterHackers.MatterControl.SlicerConfiguration;
 
 namespace MatterHackers.MatterControl.SlicerConfiguration
 {
@@ -124,7 +123,7 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
                 OrganizerCategory category = SliceSettingsOrganizer.Instance.UserLevels[UserLevel].CategoriesList[categoryIndex];
                 string categoryPageLabel = LocalizedString.Get(category.Name);
                 TabPage categoryPage = new TabPage(categoryPageLabel);
-                SimpleTextTabWidget textTabWidget = new SimpleTextTabWidget(categoryPage, 16,
+                SimpleTextTabWidget textTabWidget = new SimpleTextTabWidget(categoryPage, category.Name + " Tab", 16,
                         ActiveTheme.Instance.TabLabelSelected, new RGBA_Bytes(), ActiveTheme.Instance.TabLabelUnselected, new RGBA_Bytes());
                 categoryPage.AnchorAll();
                 categoryTabs.AddTab(textTabWidget);
@@ -138,7 +137,7 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
             if (showAllDetails.Checked && ActivePrinterProfile.Instance.ActiveSliceEngineType == ActivePrinterProfile.SlicingEngineTypes.Slic3r)
             {
                 TabPage extraSettingsPage = new TabPage("Other");
-                SimpleTextTabWidget extraSettingsTextTabWidget = new SimpleTextTabWidget(extraSettingsPage, 16,
+                SimpleTextTabWidget extraSettingsTextTabWidget = new SimpleTextTabWidget(extraSettingsPage, "Other Tab", 16,
                         ActiveTheme.Instance.TabLabelSelected, new RGBA_Bytes(), ActiveTheme.Instance.TabLabelUnselected, new RGBA_Bytes());
                 extraSettingsPage.AnchorAll();
                 int count;
@@ -276,9 +275,9 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
         event EventHandler unregisterEvents;
         private void AddHandlers()
         {
-            PrinterCommunication.Instance.ConnectionStateChanged.RegisterEvent(onPrinterStatusChanged, ref unregisterEvents);
+            PrinterConnectionAndCommunication.Instance.CommunicationStateChanged.RegisterEvent(onPrinterStatusChanged, ref unregisterEvents);
             ActivePrinterProfile.Instance.ActivePrinterChanged.RegisterEvent(APP_onPrinterStatusChanged, ref unregisterEvents);
-            PrinterCommunication.Instance.EnableChanged.RegisterEvent(onPrinterStatusChanged, ref unregisterEvents);
+            PrinterConnectionAndCommunication.Instance.EnableChanged.RegisterEvent(onPrinterStatusChanged, ref unregisterEvents);
         }
 
         public override void OnClosed(EventArgs e)
@@ -332,7 +331,7 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
 				TabPage groupTabPage = new TabPage(groupTabLabel);
                 groupTabPage.HAnchor = HAnchor.ParentLeftRight;
 
-                SimpleTextTabWidget groupTabWidget = new SimpleTextTabWidget(groupTabPage, 14,
+                SimpleTextTabWidget groupTabWidget = new SimpleTextTabWidget(groupTabPage, group.Name + " Tab", 14,
                    ActiveTheme.Instance.TabLabelSelected, new RGBA_Bytes(), ActiveTheme.Instance.TabLabelUnselected, new RGBA_Bytes());
                 groupTabWidget.HAnchor = Agg.UI.HAnchor.ParentLeftRight;
 
@@ -432,7 +431,7 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
             sideTabs.TabBar.BorderColor = RGBA_Bytes.White;
             {
                 TabPage groupTabPage = new TabPage("Extra Settings");
-                SimpleTextTabWidget groupTabWidget = new SimpleTextTabWidget(groupTabPage, 14,
+                SimpleTextTabWidget groupTabWidget = new SimpleTextTabWidget(groupTabPage, "Extra Settings Tab", 14,
                    ActiveTheme.Instance.TabLabelSelected, new RGBA_Bytes(), ActiveTheme.Instance.TabLabelUnselected, new RGBA_Bytes());
                 sideTabs.AddTab(groupTabWidget);
 
@@ -662,6 +661,29 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
                                 };
                             }
                             leftToRightLayout.AddChild(selectableOptions);
+                        }
+                        break;
+
+                    case OrganizerSettingsData.DataEditTypes.HARDWARE_PRESENT:
+                        {
+                            CheckBox checkBoxWidget = new CheckBox("");
+                            checkBoxWidget.VAnchor = Agg.UI.VAnchor.ParentBottom;
+                            checkBoxWidget.TextColor = ActiveTheme.Instance.PrimaryTextColor;
+                            checkBoxWidget.Checked = (sliceSettingValue == "1");
+                            checkBoxWidget.CheckedStateChanged += (sender, e) =>
+                            {
+                                if (((CheckBox)sender).Checked)
+                                {
+                                    SaveSetting(settingData.SlicerConfigName, "1");
+                                    // Now show all of the settings that this control is associated with.
+                                }
+                                else
+                                {
+                                    SaveSetting(settingData.SlicerConfigName, "0");
+                                    // Now hide all of the settings that this control is associated with.
+                                }
+                            };
+                            leftToRightLayout.AddChild(checkBoxWidget);
                         }
                         break;
 

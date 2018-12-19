@@ -31,12 +31,13 @@ using System;
 using System.ComponentModel;
 using System.IO;
 using MatterHackers.Agg;
-using MatterHackers.Agg.UI;
 using MatterHackers.GCodeVisualizer;
-using MatterHackers.MeshVisualizer;
+using MatterHackers.Agg.UI;
 using MatterHackers.Localizations;
+using MatterHackers.MatterControl.PrinterCommunication;
 using MatterHackers.MatterControl.PrintQueue;
 using MatterHackers.MatterControl.SlicerConfiguration;
+using MatterHackers.MeshVisualizer;
 using MatterHackers.VectorMath;
 
 namespace MatterHackers.MatterControl.PartPreviewWindow
@@ -53,7 +54,7 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
         public Slider layerEndRenderRatioSlider;
         
         TextWidget gcodeProcessingStateInfoText;
-        GCodeViewWidget gcodeViewWidget;
+        ViewGcodeWidget gcodeViewWidget;
         PrintItemWrapper printItem;
         bool startedSliceFromGenerateButton = false;
         Button generateGCodeButton;
@@ -62,6 +63,7 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
 
         FlowLayoutWidget modelOptionsContainer;
         FlowLayoutWidget displayOptionsContainer;
+		ViewControlsToggle viewControlsToggle;
 
         CheckBox expandModelOptions;
         CheckBox expandDisplayOptions;
@@ -114,7 +116,7 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
             buttonBottomPanel.Padding = new BorderDouble(3, 3);
             buttonBottomPanel.BackgroundColor = ActiveTheme.Instance.PrimaryBackgroundColor;
 
-			generateGCodeButton = textImageButtonFactory.Generate(LocalizedString.Get("Generate"));
+            generateGCodeButton = textImageButtonFactory.Generate(LocalizedString.Get("Generate"));
             generateGCodeButton.Click += new ButtonBase.ButtonEventHandler(generateButton_Click);
             buttonBottomPanel.AddChild(generateGCodeButton);
 
@@ -152,7 +154,7 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
                 {
                     if (File.Exists(printItem.FileLocation))
                     {
-                        string gcodePathAndFileName = printItem.GCodePathAndFileName;
+                        string gcodePathAndFileName = printItem.GetGCodePathAndFileName();
                         bool gcodeFileIsComplete = printItem.IsGCodeFileComplete(gcodePathAndFileName);
 
                         if (printItem.SlicingHadError)
@@ -207,17 +209,32 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
             viewControls2D = new ViewControls2D();
             AddChild(viewControls2D);
             viewControls3D = new ViewControls3D(meshViewerWidget);
+            viewControls3D.PartSelectVisible = false;
             AddChild(viewControls3D);
-            viewControls3D.Visible = false;
-            viewControls3D.translateButton.ClickButton(null);
+			viewControls3D.rotateButton.ClickButton(null);
+			viewControls3D.Visible = false;
+
+			viewControlsToggle = new ViewControlsToggle ();
+			AddChild (viewControlsToggle);
+
+            
+            //viewControls3D.translateButton.ClickButton(null);
+            
+            // move things into the right place and scale
+            {
+                Vector3 bedCenter3D = new Vector3(bedCenter, 0);
+                meshViewerWidget.PrinterBed.Translate(bedCenter3D);
+                meshViewerWidget.TrackballTumbleWidget.TrackBallController.Scale = .05;
+                meshViewerWidget.TrackballTumbleWidget.TrackBallController.Translate(-bedCenter3D);
+            }
 
             viewControls2D.translateButton.Click += (sender, e) =>
             {
-                gcodeViewWidget.TransformState = GCodeViewWidget.ETransformState.Move;
+                gcodeViewWidget.TransformState = ViewGcodeWidget.ETransformState.Move;
             };
             viewControls2D.scaleButton.Click += (sender, e) =>
             {
-                gcodeViewWidget.TransformState = GCodeViewWidget.ETransformState.Scale;
+                gcodeViewWidget.TransformState = ViewGcodeWidget.ETransformState.Scale;
             };
 
             AddHandlers();
@@ -235,17 +252,18 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
                 renderType |= RenderType.Retractions;
             }
 
+            GCodeRenderer.ExtrusionColor = ActiveTheme.Instance.PrimaryAccentColor;
             gcodeViewWidget.gCodeRenderer.Render3D(0, Math.Min(gcodeViewWidget.ActiveLayerIndex + 1, gcodeViewWidget.LoadedGCode.NumChangesInZ), gcodeViewWidget.TotalTransform, 1, renderType,
                 gcodeViewWidget.FeatureToStartOnRatio0To1, gcodeViewWidget.FeatureToEndOnRatio0To1);
         }
 
         private void SetAnimationPosition()
         {
-            int currentLayer = PrinterCommunication.Instance.CurrentlyPrintingLayer;
+            int currentLayer = PrinterConnectionAndCommunication.Instance.CurrentlyPrintingLayer;
             if (currentLayer >= 1)
             {
                 selectLayerSlider.Value = currentLayer-1;
-                layerEndRenderRatioSlider.Value = PrinterCommunication.Instance.RatioIntoCurrentLayer;
+                layerEndRenderRatioSlider.Value = PrinterConnectionAndCommunication.Instance.RatioIntoCurrentLayer;
                 layerStartRenderRatioSlider.Value = 0;
             }
         }
@@ -460,38 +478,27 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
 
             // put in a show 3D view checkbox
             {
-                CheckBox show3D = new CheckBox(LocalizedString.Get("Show 3D"), textColor: ActiveTheme.Instance.PrimaryTextColor);
-                show3D.CheckedStateChanged += (sender, e) =>
+				viewControlsToggle.twoDimensionButton.CheckedStateChanged += (sender, e) =>
                 {
-                    // show the tumbel widget and not the line widget
-                    if (show3D.Checked)
-                    {
-                        viewControls2D.Visible = false;
-                        gcodeViewWidget.Visible = false;
-
-                        viewControls3D.Visible = true;
-                        meshViewerWidget.Visible = true;
-                    }
-                    else
-                    {
-                        viewControls2D.Visible = true;
-                        gcodeViewWidget.Visible = true;
-
-                        viewControls3D.Visible = false;
-                        meshViewerWidget.Visible = false;
-                    }
+					SetLayerViewType();
                 };
-                //layerInfoContainer.AddChild(show3D);
+				viewControlsToggle.threeDimensionButton.CheckedStateChanged += (sender, e) =>
+				{
+					SetLayerViewType();
+				};
+				SetLayerViewType ();
             }
 
             // Put in the sync to print checkbox
             if (!widgetHasCloseButton)
             {
                 syncToPrint = new CheckBox("Sync To Print".Localize(), textColor: ActiveTheme.Instance.PrimaryTextColor);
-                syncToPrint.Checked = false;
+				syncToPrint.Checked = (UserSettings.Instance.get("LayerViewSyncToPrint") == "True");
                 syncToPrint.CheckedStateChanged += (sender, e) =>
                 {
-                    if (syncToPrint.Checked)
+					UserSettings.Instance.set("LayerViewSyncToPrint", syncToPrint.Checked.ToString());
+
+					if (syncToPrint.Checked)
                     {
                         SetAnimationPosition();
                         navigationWidget.Visible = false;
@@ -520,13 +527,19 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
                 };
                 layerInfoContainer.AddChild(syncToPrint);
 
-                if (PrinterCommunication.Instance.PrinterIsPrinting
-                    && PrinterCommunication.Instance.ActivePrintItem == printItem)
+                // The idea here is we just got asked to rebuild the window (and it is being created now)
+                // because the gcode finished creating for the print that is printing.
+                // We don't want to be notified if any other updates happen to this gcode while it is printing.
+                if (PrinterConnectionAndCommunication.Instance.PrinterIsPrinting
+                    && PrinterConnectionAndCommunication.Instance.ActivePrintItem == printItem)
                 {
                     printItem.SlicingOutputMessage.UnregisterEvent(sliceItem_SlicingOutputMessage, ref unregisterEvents);
                     printItem.SlicingDone.UnregisterEvent(sliceItem_Done, ref unregisterEvents);
 
                     generateGCodeButton.Visible = false;
+                    
+                    // However if the print finished or is canceled we are going to want to get updates again. So, hook the status event
+                    PrinterConnectionAndCommunication.Instance.CommunicationStateChanged.RegisterEvent(HookUpGCodeMessagesWhenDonePrinting, ref unregisterEvents);
                 }
             }
 
@@ -537,15 +550,46 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
             textImageButtonFactory.FixedWidth = oldWidth;
         }
 
-        public override void OnParentChanged(EventArgs e)
+		void SetLayerViewType()
+		{
+			if (viewControlsToggle.threeDimensionButton.Checked)
+			{
+				UserSettings.Instance.set ("LayerViewDefault", "3D Layer");
+				viewControls2D.Visible = false;
+				gcodeViewWidget.Visible = false;
+
+				viewControls3D.Visible = true;
+				meshViewerWidget.Visible = true;
+			}
+			else
+			{
+				UserSettings.Instance.set ("LayerViewDefault", "2D Layer");
+				viewControls2D.Visible = true;
+				gcodeViewWidget.Visible = true;
+
+				viewControls3D.Visible = false;
+				meshViewerWidget.Visible = false;
+			}
+		}
+
+        void HookUpGCodeMessagesWhenDonePrinting(object sender, EventArgs e)
         {
-            base.OnParentChanged(e);
+            if(!PrinterConnectionAndCommunication.Instance.PrinterIsPaused && !PrinterConnectionAndCommunication.Instance.PrinterIsPrinting)
+            {
+                // unregister first to make sure we don't double up in error (should not be needed but no harm)
+                printItem.SlicingOutputMessage.UnregisterEvent(sliceItem_SlicingOutputMessage, ref unregisterEvents);
+                printItem.SlicingDone.UnregisterEvent(sliceItem_Done, ref unregisterEvents);
+
+                // register for done slicing and slicing messages
+                printItem.SlicingOutputMessage.RegisterEvent(sliceItem_SlicingOutputMessage, ref unregisterEvents);
+                printItem.SlicingDone.RegisterEvent(sliceItem_Done, ref unregisterEvents);
+            }
         }
 
         string partToStartLoadingOnFirstDraw = null;
         private GuiWidget CreateGCodeViewWidget(string pathAndFileName)
         {
-            gcodeViewWidget = new GCodeViewWidget(new Vector2(viewerVolume.x, viewerVolume.y), bedCenter);
+            gcodeViewWidget = new ViewGcodeWidget(new Vector2(viewerVolume.x, viewerVolume.y), bedCenter);
             gcodeViewWidget.DoneLoading += DoneLoadingGCode;
             gcodeViewWidget.LoadingProgressChanged += LoadingProgressChanged;
             partToStartLoadingOnFirstDraw = pathAndFileName;
@@ -746,7 +790,7 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
             displayOptionsContainer.Visible = expandDisplayOptions.Checked;
         }
 
-        public override void OnClosed(EventArgs e)
+        public override void OnClosing(out bool cancelClose)
         {
             GuiWidget parent = Parent;
             while (parent as SystemWindow == null)
@@ -769,7 +813,8 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
                     SlicingQueue.Instance.CancelCurrentSlicing();
                 }
             }
-            base.OnClosed(e);
+
+            base.OnClosing(out cancelClose);
         }
 
         void generateButton_Click(object sender, MouseEventArgs mouseEvent)
@@ -817,10 +862,10 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
     {
         NumberEdit editCurrentLayerIndex;
         Button setLayerButton;
-        GCodeViewWidget gcodeViewWidget;
+        ViewGcodeWidget gcodeViewWidget;
         TextImageButtonFactory textImageButtonFactory = new TextImageButtonFactory();        
 
-        public SetLayerWidget(GCodeViewWidget gcodeViewWidget)
+        public SetLayerWidget(ViewGcodeWidget gcodeViewWidget)
             :base(FlowDirection.LeftToRight)
         {
             this.gcodeViewWidget = gcodeViewWidget;
@@ -865,10 +910,10 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
         Button prevLayerButton;
         Button nextLayerButton;        
         TextWidget layerCountTextWidget;        
-        GCodeViewWidget gcodeViewWidget;
+        ViewGcodeWidget gcodeViewWidget;
         TextImageButtonFactory textImageButtonFactory = new TextImageButtonFactory();
 
-        public LayerNavigationWidget(GCodeViewWidget gcodeViewWidget)
+        public LayerNavigationWidget(ViewGcodeWidget gcodeViewWidget)
             :base(FlowDirection.LeftToRight)
         {
             this.gcodeViewWidget = gcodeViewWidget;

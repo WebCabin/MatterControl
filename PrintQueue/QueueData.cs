@@ -40,6 +40,7 @@ using MatterHackers.VectorMath;
 using MatterHackers.MatterControl;
 using MatterHackers.MatterControl.DataStorage;
 using MatterHackers.Agg.ImageProcessing;
+using MatterHackers.MatterControl.PrinterCommunication;
 
 namespace MatterHackers.MatterControl.PrintQueue
 {
@@ -67,6 +68,8 @@ namespace MatterHackers.MatterControl.PrintQueue
 
     public class QueueData
     {
+        public static readonly string SdCardFileName = "SD_CARD";
+
         private List<PrintItemWrapper> printItems = new List<PrintItemWrapper>();
         private List<PrintItemWrapper> PrintItems
         {
@@ -138,8 +141,8 @@ namespace MatterHackers.MatterControl.PrintQueue
         {
             if (index >= 0 && index < Count)
             {
-                bool ActiveItemMustStayInQueue = PrinterCommunication.Instance.PrinterIsPrinting || PrinterCommunication.Instance.PrinterIsPaused;
-                bool PartMustStayInQueue = ActiveItemMustStayInQueue && PrintItems[index] == PrinterCommunication.Instance.ActivePrintItem;
+                bool ActiveItemMustStayInQueue = PrinterConnectionAndCommunication.Instance.PrinterIsPrinting || PrinterConnectionAndCommunication.Instance.PrinterIsPaused;
+                bool PartMustStayInQueue = ActiveItemMustStayInQueue && PrintItems[index] == PrinterConnectionAndCommunication.Instance.ActivePrintItem;
                 if (!PartMustStayInQueue)
                 {
                     PrintItems.RemoveAt(index);
@@ -182,6 +185,67 @@ namespace MatterHackers.MatterControl.PrintQueue
             return itemNames.ToArray();
         }
 
+        bool gotBeginFileList = false;
+        event EventHandler unregisterEvents;
+        public void LoadFilesFromSD()
+        {
+            if (PrinterConnectionAndCommunication.Instance.PrinterIsConnected
+                && !(PrinterConnectionAndCommunication.Instance.PrinterIsPrinting
+                || PrinterConnectionAndCommunication.Instance.PrinterIsPaused))
+            {
+                gotBeginFileList = false;
+                PrinterConnectionAndCommunication.Instance.ReadLine.RegisterEvent(GetSdCardList, ref unregisterEvents);
+                StringBuilder commands = new StringBuilder();
+                commands.AppendLine("M21"); // Init SD card
+                commands.AppendLine("M20"); // List SD card
+                PrinterConnectionAndCommunication.Instance.SendLineToPrinterNow(commands.ToString());
+            }
+        }
+
+        void GetSdCardList(object sender, EventArgs e)
+        {
+            StringEventArgs currentEvent = e as StringEventArgs;
+            if (currentEvent != null)
+            {
+                if (!currentEvent.Data.StartsWith("echo:"))
+                {
+                    switch (currentEvent.Data)
+                    {
+                        case "Begin file list":
+                            gotBeginFileList = true;
+                            break;
+
+                        default:
+                            if(gotBeginFileList)
+                            {
+                                bool sdCardItemInQueue = false;
+
+                                foreach (PrintItem item in CreateReadOnlyPartList())
+                                {
+                                    if (item.FileLocation == QueueData.SdCardFileName
+                                        && item.Name == currentEvent.Data)
+                                    {
+                                        sdCardItemInQueue = true;
+                                        break;
+                                    }
+                                }
+
+                                if (!sdCardItemInQueue)
+                                {
+                                    // If there is not alread an sd card item in the queue with this name then add it.
+                                    AddItem(new PrintItemWrapper(new PrintItem(currentEvent.Data, QueueData.SdCardFileName)));
+                                }
+                            }
+                            break;
+
+                        case "End file list":
+                            PrinterConnectionAndCommunication.Instance.ReadLine.UnregisterEvent(GetSdCardList, ref unregisterEvents);
+                            break;
+                    }
+                }
+            }
+        }
+
         public List<PrintItem> CreateReadOnlyPartList()
         {
             List<PrintItem> listToReturn = new List<PrintItem>();
@@ -213,6 +277,19 @@ namespace MatterHackers.MatterControl.PrintQueue
                 foreach (PrintItem item in partFiles)
                 {
                     AddItem(new PrintItemWrapper(item));
+                }
+            }
+            RemoveAllSdCardFiles();
+        }
+
+        public void RemoveAllSdCardFiles()
+        {
+            for (int i = Count - 1; i >= 0; i--)
+            {
+                PrintItem printItem = PrintItems[i].PrintItem;
+                if (printItem.FileLocation == QueueData.SdCardFileName)
+                {
+                    RemoveAt(i);
                 }
             }
         }

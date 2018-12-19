@@ -40,6 +40,7 @@ using MatterHackers.Agg.VertexSource;
 using MatterHackers.Agg;
 using MatterHackers.Agg.UI;
 using MatterHackers.VectorMath;
+using MatterHackers.MatterControl.PrinterCommunication;
 using MatterHackers.MatterControl.PartPreviewWindow;
 using MatterHackers.MatterControl.DataStorage;
 using MatterHackers.MatterControl.PrintLibrary;
@@ -166,7 +167,7 @@ namespace MatterHackers.MatterControl.PrintQueue
 		{
 			if (viewWindowIsOpen == false)
 			{
-				viewingWindow = new PartPreviewMainWindow(PrintItemWrapper);
+				viewingWindow = new PartPreviewMainWindow(PrintItemWrapper, View3DTransformPart.AutoRotate.Enabled);
 				this.viewWindowIsOpen = true;
 				viewingWindow.Closed += new EventHandler(PartPreviewWindow_Closed);
 			}
@@ -194,52 +195,56 @@ namespace MatterHackers.MatterControl.PrintQueue
 
                 linkButtonFactory.margin = new BorderDouble(3);
 
-                // view button
+                bool fileIsOnPrinterSdCard = PrintItemWrapper.PrintItem.FileLocation == QueueData.SdCardFileName;
+                if (!fileIsOnPrinterSdCard)
                 {
-					Button viewLink = linkButtonFactory.Generate(LocalizedString.Get("View"));
-                    viewLink.Click += (sender, e) =>
+                    // view button
                     {
-
-                        string pathAndFile = PrintItemWrapper.FileLocation;
-                        if (File.Exists(pathAndFile))
+                        Button viewLink = linkButtonFactory.Generate(LocalizedString.Get("View"));
+                        viewLink.Click += (sender, e) =>
                         {
-							OpenViewWindow();
-                        }
-                        else
-                        {
-                            ShowCantFindFileMessage(PrintItemWrapper);
-                        }
-                    };
-                    layoutLeftToRight.AddChild(viewLink);
-                }
 
-                // copy button
-                {
-					Button copyLink = linkButtonFactory.Generate(LocalizedString.Get("Copy"));
-                    copyLink.Click += (sender, e) =>
-                    {
-                        CreateCopyInQueue();
-                    };
-                    layoutLeftToRight.AddChild(copyLink);
-                }
-
-                // add to library button
-                {
-                    if (this.PrintItemWrapper.PrintItem.PrintItemCollectionID == LibraryData.Instance.LibraryCollection.Id)
-                    {
-                        //rightColumnOptions.AddChild(new TextWidget("Libary Item"));
+                            string pathAndFile = PrintItemWrapper.FileLocation;
+                            if (File.Exists(pathAndFile))
+                            {
+                                OpenViewWindow();
+                            }
+                            else
+                            {
+                                ShowCantFindFileMessage(PrintItemWrapper);
+                            }
+                        };
+                        layoutLeftToRight.AddChild(viewLink);
                     }
-                }
 
-                // the export menu
-                {
-					Button exportLink = linkButtonFactory.Generate(LocalizedString.Get("Export"));
-                    exportLink.Click += (sender, e) =>
+                    // copy button
                     {
-						OpenExportWindow();
-                        
-                    };
-                    layoutLeftToRight.AddChild(exportLink);
+                        Button copyLink = linkButtonFactory.Generate(LocalizedString.Get("Copy"));
+                        copyLink.Click += (sender, e) =>
+                        {
+                            CreateCopyInQueue();
+                        };
+                        layoutLeftToRight.AddChild(copyLink);
+                    }
+
+                    // add to library button
+                    {
+                        if (this.PrintItemWrapper.PrintItem.PrintItemCollectionID == LibraryData.Instance.LibraryCollection.Id)
+                        {
+                            //rightColumnOptions.AddChild(new TextWidget("Libary Item"));
+                        }
+                    }
+
+                    // the export menu
+                    {
+                        Button exportLink = linkButtonFactory.Generate(LocalizedString.Get("Export"));
+                        exportLink.Click += (sender, e) =>
+                        {
+                            OpenExportWindow();
+
+                        };
+                        layoutLeftToRight.AddChild(exportLink);
+                    }
                 }
 
                 // spacer
@@ -252,7 +257,7 @@ namespace MatterHackers.MatterControl.PrintQueue
 					Button deleteLink = linkButtonFactory.Generate(LocalizedString.Get("Remove"));
                     deleteLink.Click += (sender, e) =>
                     {
-                        DeletePartFromQueue();
+                        UiThread.RunOnIdle(DeletePartFromQueue);
                     };
                     layoutLeftToRight.AddChild(deleteLink);
                 }
@@ -368,7 +373,7 @@ namespace MatterHackers.MatterControl.PrintQueue
         public void CreateCopyInQueue()
         {
             int thisIndexInQueue = QueueData.Instance.GetIndex(PrintItemWrapper);
-            if (thisIndexInQueue != -1)
+            if (thisIndexInQueue != -1 && File.Exists(PrintItemWrapper.FileLocation))
             {
                 string applicationDataPath = ApplicationDataStorage.Instance.ApplicationUserDataPath;
                 string stagingFolder = Path.Combine(applicationDataPath, "data", "temp", "stl");
@@ -422,8 +427,19 @@ namespace MatterHackers.MatterControl.PrintQueue
             }
         }
 
-        public void DeletePartFromQueue()
+        string alsoRemoveFromSdCardMessage = "Would you also like to remove this file from the Printer's SD Card?".Localize();
+        string alsoRemoveFromSdCardTitle = "Remove From Printer's SD Card?";
+        void DeletePartFromQueue(object state)
         {
+            if (PrintItemWrapper.PrintItem.FileLocation == QueueData.SdCardFileName)
+            {
+                if (StyledMessageBox.ShowMessageBox(alsoRemoveFromSdCardMessage, alsoRemoveFromSdCardTitle, StyledMessageBox.MessageType.YES_NO))
+                {
+                    // The firmware only understands the names when lowercase.
+                    PrinterConnectionAndCommunication.Instance.DeleteFileFromSdCard(PrintItemWrapper.PrintItem.Name);
+                }
+            }
+
             int thisIndexInQueue = QueueData.Instance.GetIndex(PrintItemWrapper);
             QueueData.Instance.RemoveIndexOnIdle(thisIndexInQueue);
         }

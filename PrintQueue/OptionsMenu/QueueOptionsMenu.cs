@@ -39,10 +39,13 @@ using System.Threading;
 using MatterHackers.Agg.Image;
 using MatterHackers.Agg.VertexSource;
 using MatterHackers.Agg;
+using MatterHackers.MatterControl.SlicerConfiguration;
 using MatterHackers.Agg.UI;
 using MatterHackers.VectorMath;
 using MatterHackers.MatterControl.DataStorage;
 using MatterHackers.Localizations;
+using MatterHackers.MatterControl.PrinterCommunication;
+using MatterHackers.Agg.PlatformAbstract;
 
 namespace MatterHackers.MatterControl.PrintQueue
 {
@@ -85,36 +88,33 @@ namespace MatterHackers.MatterControl.PrintQueue
 
         void SetMenuItems()
         {
+            menuItems = new TupleList<string, Func<bool>>();
+            menuItems.Add(new Tuple<string,Func<bool>>("STL", null));
+            menuItems.Add(new Tuple<string,Func<bool>>(LocalizedString.Get(" Import from Zip"), importQueueFromZipMenu_Click));
+            menuItems.Add(new Tuple<string,Func<bool>>(LocalizedString.Get(" Export to Zip"), exportQueueToZipMenu_Click));
+            menuItems.Add(new Tuple<string,Func<bool>>("GCode", null));
+            menuItems.Add(new Tuple<string,Func<bool>>(LocalizedString.Get(" Export to Folder"), exportGCodeToFolderButton_Click));
+
+            if (ActiveSliceSettings.Instance.HasSdCardReader())
+            {
+                menuItems.Add(new Tuple<string, Func<bool>>("SD Card", null));
+                menuItems.Add(new Tuple<string, Func<bool>>(LocalizedString.Get(" Load Files"), loadFilesFromSDButton_Click));
+                menuItems.Add(new Tuple<string, Func<bool>>(LocalizedString.Get(" Eject SD Card"), ejectSDCardButton_Click));
+            }
+            
             // The pdf export library is not working on the mac at the moment so we don't include the 
             // part sheet export option on mac.
-            if (MatterHackers.Agg.UI.WindowsFormsAbstract.GetOSType() == WindowsFormsAbstract.OSType.Mac)
+            if (OsInformation.OperatingSystem == OSType.Mac)
             {
-                //Set the name and callback function of the menu items
-                menuItems = new TupleList<string, Func<bool>> 
-                {
-                {"STL", null},
-                {LocalizedString.Get(" Import from Zip"), importQueueFromZipMenu_Click},
-                {LocalizedString.Get(" Export to Zip"), exportQueueToZipMenu_Click},
-                {"GCode", null},
-                    {LocalizedString.Get(" Export to Folder"), exportGCodeToFolderButton_Click},
-                {LocalizedString.Get("Other"), null},
-				    {LocalizedString.Get(" Remove All"), removeAllFromQueueButton_Click},
-                };
+                // mac cannot export to pdf
+                menuItems.Add(new Tuple<string,Func<bool>>(LocalizedString.Get("Other"), null));
+                menuItems.Add(new Tuple<string,Func<bool>>(LocalizedString.Get(" Remove All"), removeAllFromQueueButton_Click));
             }
             else
             {
-                //Set the name and callback function of the menu items
-                menuItems = new TupleList<string, Func<bool>> 
-                {
-                {"STL", null},
-                    {LocalizedString.Get(" Import from Zip"), importQueueFromZipMenu_Click},
-                    {LocalizedString.Get(" Export to Zip"), exportQueueToZipMenu_Click},
-                {"GCode", null},
-                    {LocalizedString.Get(" Export to Folder"), exportGCodeToFolderButton_Click},
-                {LocalizedString.Get("Other"), null},
-                    {LocalizedString.Get(" Create Part Sheet"), createPartsSheetsButton_Click},
-					{LocalizedString.Get(" Remove All"), removeAllFromQueueButton_Click},
-                };
+                menuItems.Add(new Tuple<string,Func<bool>>(LocalizedString.Get("Other"), null));
+                menuItems.Add(new Tuple<string,Func<bool>>(LocalizedString.Get(" Create Part Sheet"), createPartsSheetsButton_Click));
+                menuItems.Add(new Tuple<string,Func<bool>>(LocalizedString.Get(" Remove All"), removeAllFromQueueButton_Click));
             }
 
             BorderDouble padding = MenuDropList.MenuItemsPadding;
@@ -175,9 +175,11 @@ namespace MatterHackers.MatterControl.PrintQueue
             }
         }
 
+        string pleaseSelectPrinterMessage = "Before you can export printable files, you must select a printer.";
+        string pleaseSelectPrinterTitle = "Please select a printer";
         void MustSelectPrinterMessage(object state)
         {
-            StyledMessageBox.ShowMessageBox("You must select a printer before you can export printable files.", "You must select a printer");
+            StyledMessageBox.ShowMessageBox(pleaseSelectPrinterMessage, pleaseSelectPrinterTitle);
         }
 
         bool exportGCodeToFolderButton_Click()
@@ -249,7 +251,21 @@ namespace MatterHackers.MatterControl.PrintQueue
             UiThread.RunOnIdle(ImportQueueFromZipMenuOnIdle);
             return true;
         }
-        
+
+        bool loadFilesFromSDButton_Click()
+        {
+            QueueData.Instance.LoadFilesFromSD();
+            return true;
+        }
+
+        bool ejectSDCardButton_Click()
+        {
+            // Remove all the QueueData.SdCardFileName parts from the queue
+            QueueData.Instance.RemoveAllSdCardFiles();
+            PrinterConnectionAndCommunication.Instance.SendLineToPrinterNow("M22"); // (Release SD card)
+            return true;
+        }
+
         void ImportQueueFromZipMenuOnIdle(object state)
         {
             ProjectFileHandler project = new ProjectFileHandler(null);

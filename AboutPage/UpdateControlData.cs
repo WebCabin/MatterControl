@@ -34,8 +34,10 @@ using System.IO;
 using System.Net;
 using System.Threading;
 using MatterHackers.Agg;
+using MatterHackers.Agg.PlatformAbstract;
 using MatterHackers.Agg.UI;
 using MatterHackers.Localizations;
+using MatterHackers.MatterControl.SettingsManagement;
 using MatterHackers.MatterControl.VersionManagement;
 
 namespace MatterHackers.MatterControl
@@ -46,11 +48,26 @@ namespace MatterHackers.MatterControl
 
         int downloadPercent;
         int downloadSize;
-        bool updateInitiated;
 
         public int DownloadPercent { get { return downloadPercent; } }
 
-        public enum UpdateStatusStates { MayBeAvailable, CheckingForUpdate, UpdateAvailable, UpdateDownloading, ReadyToInstall, UpToDate }; 
+        public enum UpdateRequestType { UserRequested, Automatic, FirstTimeEver };
+        UpdateRequestType updateRequestType;
+
+        public enum UpdateStatusStates { MayBeAvailable, CheckingForUpdate, UpdateAvailable, UpdateDownloading, ReadyToInstall, UpToDate };
+
+        bool WaitingToCompleteTransaction()
+        {
+            switch(UpdateStatus)
+            {
+                case UpdateStatusStates.CheckingForUpdate:
+                case UpdateStatusStates.UpdateDownloading:
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
         
         public RootedObjectEventHandler UpdateStatusChanged = new RootedObjectEventHandler();
 
@@ -100,7 +117,7 @@ namespace MatterHackers.MatterControl
         {
             get
             {
-                if (MatterHackers.Agg.UI.WindowsFormsAbstract.GetOSType() == WindowsFormsAbstract.OSType.Mac)
+                if (OsInformation.OperatingSystem == OSType.Mac)
                 {
                     return "pkg";
                 }
@@ -125,12 +142,17 @@ namespace MatterHackers.MatterControl
             }
         }
 
-        public void CheckForUpdate()
+        public void CheckForUpdateUserRequested()
         {
-            if (!updateInitiated)
+            updateRequestType = UpdateRequestType.UserRequested;
+            CheckForUpdate();
+        }
+
+        void CheckForUpdate()
+        {
+            if (!WaitingToCompleteTransaction())
             {
                 SetUpdateStatus(UpdateStatusStates.CheckingForUpdate);
-                updateInitiated = true;
                 RequestLatestVersion request = new RequestLatestVersion();
                 request.RequestSucceeded += new EventHandler(onVersionRequestSucceeded);
                 request.RequestFailed += new EventHandler(onVersionRequestFailed);
@@ -138,9 +160,12 @@ namespace MatterHackers.MatterControl
             }
         }
 
+        string updateAvailableMessage = "There is a recommended update avalible for MatterControl. Would you like to download it now?".Localize();
+        string updateAvailableTitle = "Recommended Update Available".Localize();
+        string downloadNow = "Download Now".Localize();
+        string remindMeLater = "Remind Me Later".Localize();
         void onVersionRequestSucceeded(object sender, EventArgs e)
         {
-            this.updateInitiated = false;
             string currentBuildToken = ApplicationSettings.Instance.get("CurrentBuildToken");
             string updateFileName = Path.Combine(updateFileLocation, string.Format("{0}.{1}", currentBuildToken, InstallerExtension));
 
@@ -156,29 +181,56 @@ namespace MatterHackers.MatterControl
             }
             else
             {
-                if (DownloadHasZeroSize())
+                SetUpdateStatus(UpdateStatusStates.UpdateAvailable);
+                if (updateRequestType == UpdateRequestType.FirstTimeEver)
                 {
-                    SetUpdateStatus(UpdateStatusStates.UpToDate);
-                }
-                else
-                {
-                    SetUpdateStatus(UpdateStatusStates.UpdateAvailable);
+                    UiThread.RunOnIdle((state) =>
+                    {
+                        // show a dialog to tell the user there is an update
+                        if (StyledMessageBox.ShowMessageBox(updateAvailableMessage, updateAvailableTitle, StyledMessageBox.MessageType.YES_NO, downloadNow, remindMeLater))
+                        {
+                            InitiateUpdateDownload();
+                            // Switch to the about page so we can see the download progress.
+                            GuiWidget aboutTabWidget = FindNamedWidgetRecursive(ApplicationWidget.Instance, "About Tab");
+                            Tab aboutTab = aboutTabWidget as Tab;
+                            if (aboutTab != null)
+                            {
+                                aboutTab.TabBarContaningTab.SelectTab(aboutTab);
+                            }
+                        }
+                    });
                 }
             }
         }
 
+        static GuiWidget FindNamedWidgetRecursive(GuiWidget root, string name)
+        {
+            foreach (GuiWidget child in root.Children)
+            {
+                if (child.Name == name)
+                {
+                    return child;
+                }
+
+                GuiWidget foundWidget = FindNamedWidgetRecursive(child, name);
+                if (foundWidget != null)
+                {
+                    return foundWidget;
+                }
+            }
+
+            return null;
+        }
+
         void onVersionRequestFailed(object sender, EventArgs e)
         {
-            this.updateInitiated = false;
             SetUpdateStatus(UpdateStatusStates.UpToDate);
         }
 
         public void InitiateUpdateDownload()
         {
-            if (!updateInitiated)
+            if (!WaitingToCompleteTransaction())
             {
-                updateInitiated = true;
-
                 SetUpdateStatus(UpdateStatusStates.UpdateDownloading);
 
                 string downloadUri = string.Format("https://mattercontrol.appspot.com/downloads/development/{0}", ApplicationSettings.Instance.get("CurrentBuildToken"));
@@ -213,55 +265,42 @@ namespace MatterHackers.MatterControl
             }
         }
 
-        public bool DownloadHasZeroSize()
-        {
-            bool zeroSizeDownload = false;
-            string downloadUri = string.Format("https://mattercontrol.appspot.com/downloads/development/{0}", ApplicationSettings.Instance.get("CurrentBuildToken"));
-            string downloadToken = ApplicationSettings.Instance.get("CurrentBuildToken");
-
-            //Make HEAD request to determine the size of the download (required by GAE)
-            System.Net.WebRequest request = System.Net.WebRequest.Create(downloadUri);
-            request.Method = "HEAD";
-
-            try
-            {
-                WebResponse response = request.GetResponse();
-                downloadSize = (int)response.ContentLength;
-                if (downloadSize == 0)
-                {
-                    zeroSizeDownload = true;
-                }
-
-            }
-            catch
-            {
-                //Unknown download size
-                downloadSize = 0;
-            }
-            return zeroSizeDownload;
-        }
-
         void DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
         {            
             if (downloadSize > 0)
             {
                 this.downloadPercent = (int)(e.BytesReceived * 100 / downloadSize);
             }
-            UpdateStatusChanged.CallEvents(this, e);            
+            UiThread.RunOnIdle((state) =>
+            {
+                UpdateStatusChanged.CallEvents(this, e);
+            });
         }
 
         void DownloadCompleted(object sender, EventArgs e)
         {
-            updateInitiated = false;
-            SetUpdateStatus(UpdateStatusStates.ReadyToInstall);
+            UiThread.RunOnIdle((state) =>
+            {
+                SetUpdateStatus(UpdateStatusStates.ReadyToInstall);
+            });
+
             webClient.Dispose();
         }
 
         private UpdateControlData()
         {
             CheckVersionStatus();
-            if (ApplicationSettings.Instance.get("ClientToken") != null)
+            if (ApplicationSettings.Instance.get("ClientToken") != null 
+                || OemSettings.Instance.CheckForUpdatesOnFirstRun)
             {
+                if (ApplicationSettings.Instance.get("ClientToken") == null)
+                {
+                    updateRequestType = UpdateRequestType.FirstTimeEver;
+                }
+                else
+                {
+                    updateRequestType = UpdateRequestType.Automatic;
+                }
                 //If we have already requested an update once, check on load
                 CheckForUpdate();
             }

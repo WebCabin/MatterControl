@@ -1,18 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.IO;
-using System.IO.Ports;
 using System.Diagnostics;
-
+using System.IO;
 using MatterHackers.Agg;
+using MatterHackers.Agg.PlatformAbstract;
 using MatterHackers.Agg.UI;
-using MatterHackers.Agg.OpenGlGui;
-using MatterHackers.PolygonMesh;
-using MatterHackers.RenderOpenGl;
-using MatterHackers.VectorMath;
-using MatterHackers.MatterControl.DataStorage;
 using MatterHackers.Localizations;
 
 namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
@@ -113,9 +104,9 @@ namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
 
         void InstallDriver(string fileName)
         {
-            switch (MatterHackers.Agg.UI.WindowsFormsAbstract.GetOSType())
+            switch (OsInformation.OperatingSystem)
             {
-                case Agg.UI.WindowsFormsAbstract.OSType.Windows:
+                case OSType.Windows:
                     if (File.Exists(fileName))
                     {
                         if (Path.GetExtension(fileName).ToUpper() == ".INF")
@@ -152,8 +143,46 @@ namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
                     }
                     break;
 
-                case Agg.UI.WindowsFormsAbstract.OSType.Mac:
+                case OSType.Mac:
                     break;
+
+                case OSType.X11:
+				if (File.Exists(fileName))
+				{
+					if (Path.GetExtension(fileName).ToUpper() == ".INF")
+					{
+						var driverInstallerProcess = new Process();
+						// Prepare the process to run
+						// Enter in the command line arguments, everything you would enter after the executable name itself
+						driverInstallerProcess.StartInfo.Arguments = Path.GetFullPath(fileName);
+						// Enter the executable to run, including the complete path
+						string printerDriverInstallerExePathAndFileName = Path.Combine(".", "InfInstaller.exe");
+
+						driverInstallerProcess.StartInfo.CreateNoWindow = true;
+						driverInstallerProcess.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+
+						driverInstallerProcess.StartInfo.FileName = Path.GetFullPath(printerDriverInstallerExePathAndFileName);
+						driverInstallerProcess.StartInfo.Verb = "runas";
+						driverInstallerProcess.StartInfo.UseShellExecute = true;
+
+						driverInstallerProcess.Start();
+
+						driverInstallerProcess.WaitForExit();
+
+						// Retrieve the app's exit code
+						var exitCode = driverInstallerProcess.ExitCode;
+					}
+					else
+					{
+						Process.Start(fileName);
+					}
+				}
+				else
+				{
+					throw new Exception(string.Format("Can't find dirver {0}.", fileName));
+				}
+				break;
+
             }
         }
 

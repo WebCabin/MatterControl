@@ -3,9 +3,7 @@ using System.Diagnostics;
 
 using MatterHackers.Agg;
 using MatterHackers.Agg.UI;
-using MatterHackers.Agg.OpenGlGui;
 using MatterHackers.PolygonMesh;
-using MatterHackers.RenderOpenGl;
 using MatterHackers.VectorMath;
 using MatterHackers.MatterControl.DataStorage;
 
@@ -166,6 +164,18 @@ namespace MatterHackers.MatterControl
             actuallNumberEdit.InternalTextEditWidget.EditComplete += new EventHandler(InternalTextEditWidget_EditComplete);
 
             UiThread.RunOnIdle(OnIdle);
+        }
+
+        public override int TabIndex
+        {
+            get
+            {
+                return base.TabIndex;
+            }
+            set
+            {
+                actuallNumberEdit.TabIndex = value;
+            }
         }
 
         void InternalTextEditWidget_EditComplete(object sender, EventArgs e)

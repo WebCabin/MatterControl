@@ -81,7 +81,6 @@ namespace MatterHackers.MatterControl.PrintQueue
 
         public ExportToFolderProcess(List<DataStorage.PrintItem> list, string exportPath)
         {
-            // TODO: Complete member initialization
             this.allFilesToExport = list;
             this.exportPath = exportPath;
 
@@ -134,7 +133,7 @@ namespace MatterHackers.MatterControl.PrintQueue
             sliceItem.SlicingOutputMessage.UnregisterEvent(printItemWrapper_SlicingOutputMessage, ref unregisterEvents);
             if (File.Exists(sliceItem.FileLocation))
             {
-                savedGCodeFileNames.Add(sliceItem.GCodePathAndFileName);
+                savedGCodeFileNames.Add(sliceItem.GetGCodePathAndFileName());
             }
 
             itemCountBeingWorkedOn++;
@@ -193,7 +192,7 @@ namespace MatterHackers.MatterControl.PrintQueue
                         if (ActivePrinterProfile.Instance.DoPrintLeveling)
                         {
                             GCodeFile unleveledGCode = new GCodeFile(savedGcodeFileName);
-                            PrintLeveling.Instance.ApplyLeveling(unleveledGCode);
+                            PrintLevelingPlane.Instance.ApplyLeveling(unleveledGCode);
                             unleveledGCode.Save(outputPathAndName);
                         }
                         else

@@ -1,15 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.IO;
-using System.Data.Common;
 using System.Diagnostics;
-using System.ComponentModel;
-using System.Reflection;
+using System.IO;
 using System.Threading;
-
-using MatterHackers.VectorMath;
+using MatterHackers.Agg.PlatformAbstract;
 
 namespace MatterHackers.MatterControl.DataStorage
 {
@@ -93,9 +87,9 @@ namespace MatterHackers.MatterControl.DataStorage
         {
             get
             {
-                switch (MatterHackers.Agg.UI.WindowsFormsAbstract.GetOSType())
+                switch (OsInformation.OperatingSystem)
                 {
-                    case Agg.UI.WindowsFormsAbstract.OSType.Windows:
+                    case OSType.Windows:
                         if (Directory.Exists("StaticData"))
                         {
                             return "StaticData";
@@ -105,7 +99,7 @@ namespace MatterHackers.MatterControl.DataStorage
                             return Path.Combine("..", "..", "StaticData");
                         }
 
-                    case Agg.UI.WindowsFormsAbstract.OSType.Mac:
+                    case OSType.Mac:
                         if (Directory.Exists("StaticData"))
                         {
                             return "StaticData";
@@ -118,7 +112,16 @@ namespace MatterHackers.MatterControl.DataStorage
 						{
 							return Path.Combine("..", "..", "StaticData");
 						}
-
+                    case OSType.X11:
+						if (Directory.Exists("StaticData"))
+						{
+							return "StaticData";
+						}
+						else
+						{
+							return Path.Combine("..", "..", "StaticData");
+						}
+						
                     default:
                         throw new NotImplementedException();
 				}
@@ -164,7 +167,7 @@ namespace MatterHackers.MatterControl.DataStorage
         static Datastore globalInstance;     
         static string datastoreLocation = ApplicationDataStorage.Instance.DatastorePath;        
         public bool ConnectionError = false;
-        List<Type> dataStoreTables = new List<Type> { typeof(PrintItemCollection), typeof(CustomCommands), typeof(SystemSetting), typeof(UserSetting), typeof(ApplicationSession), typeof(PrintItem), typeof(PrintTask), typeof(Printer), typeof(SliceSetting), typeof(SliceSettingsCollection) };
+		List<Type> dataStoreTables = new List<Type> { typeof(PrintItemCollection), typeof(PrinterSetting), typeof(CustomCommands), typeof(SystemSetting), typeof(UserSetting), typeof(ApplicationSession), typeof(PrintItem), typeof(PrintTask), typeof(Printer), typeof(SliceSetting), typeof(SliceSettingsCollection) };
         ApplicationSession activeSession;
         public ISQLite dbSQLite;
 
@@ -196,16 +199,25 @@ namespace MatterHackers.MatterControl.DataStorage
                     }
                 }
             }
-            
-            switch (MatterHackers.Agg.UI.WindowsFormsAbstract.GetOSType())
+
+            OSType osType = OsInformation.OperatingSystem;
+			switch (osType)
             {
-                case Agg.UI.WindowsFormsAbstract.OSType.Windows:
+                case OSType.Windows:
                     dbSQLite = new SQLiteWin32.SQLiteConnection(datastoreLocation);
                     break;
 
-                case Agg.UI.WindowsFormsAbstract.OSType.Mac:
+                case OSType.Mac:
                     dbSQLite = new SQLiteUnix.SQLiteConnection(datastoreLocation);
                     break;
+
+                case OSType.X11:
+					dbSQLite = new SQLiteUnix.SQLiteConnection(datastoreLocation);
+					break;
+
+				case OSType.Android:
+					dbSQLite = new SQLiteAndroid.SQLiteConnection(datastoreLocation);
+					break;
 
                 default:
                     throw new NotImplementedException();

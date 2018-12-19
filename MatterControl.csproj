@@ -1,10 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Release</Configuration>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProductVersion>8.0.50727</ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{0B8D6F56-BD7F-4426-B858-D9292B084656}</ProjectGuid>
     <OutputType>WinExe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
@@ -38,13 +36,16 @@
     <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
+    <ProductVersion>8.0.30703</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ReleaseVersion>0.8.2</ReleaseVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>True</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>False</Optimize>
     <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>TRACE;DEBUG</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
@@ -54,7 +55,7 @@
     <DebugType>none</DebugType>
     <Optimize>True</Optimize>
     <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
+    <DefineConstants>TRACE;</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <PlatformTarget>x86</PlatformTarget>
@@ -68,7 +69,6 @@
     <DefineConstants>TRACE</DefineConstants>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Optimize>true</Optimize>
-    <FileAlignment>4096</FileAlignment>
     <PlatformTarget>x64</PlatformTarget>
     <CodeAnalysisLogFile>bin\Release\MatterControl.exe.CodeAnalysisLog.xml</CodeAnalysisLogFile>
     <CodeAnalysisUseTypeNameInSuppression>true</CodeAnalysisUseTypeNameInSuppression>
@@ -78,6 +78,7 @@
     <CodeAnalysisRuleSetDirectories>;C:\Program Files (x86)\Microsoft Visual Studio 10.0\Team Tools\Static Analysis Tools\\Rule Sets</CodeAnalysisRuleSetDirectories>
     <CodeAnalysisIgnoreBuiltInRuleSets>false</CodeAnalysisIgnoreBuiltInRuleSets>
     <CodeAnalysisRuleDirectories>;C:\Program Files (x86)\Microsoft Visual Studio 10.0\Team Tools\Static Analysis Tools\FxCop\\Rules</CodeAnalysisRuleDirectories>
+    <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>
@@ -95,8 +96,15 @@
     <Compile Include="ActionBar\TemperatureWidgetExtruder.cs" />
     <Compile Include="ApplicationView\ApplicationMenuRow.cs" />
     <Compile Include="ApplicationView\CompactSlidePanel.cs" />
-    <Compile Include="ApplicationView\MainScreenTabView.cs" />
+    <Compile Include="ApplicationView\ThirdPanelTabView.cs" />
+    <Compile Include="ApplicationView\FirstPanelTabView.cs" />
     <Compile Include="ConfigurationPage\LanguageSelector.cs" />
+    <Compile Include="ConfigurationPage\PrintLeveling\LevelWizard2Point.cs" />
+    <Compile Include="ConfigurationPage\PrintLeveling\InstructionsPage.cs" />
+    <Compile Include="ConfigurationPage\PrintLeveling\LevelWizard3Point.cs" />
+    <Compile Include="ConfigurationPage\PrintLeveling\LevelWizardBase.cs" />
+    <Compile Include="ConfigurationPage\PrintLeveling\PrintLevelingData.cs" />
+    <Compile Include="CrashTracker.cs" />
     <Compile Include="CustomWidgets\FlowSpacers.cs" />
     <Compile Include="CustomWidgets\PanelSeparator.cs" />
     <Compile Include="DataStorage\Models.cs" />
@@ -104,19 +112,25 @@
     <Compile Include="PartPreviewWindow\ViewControls3D.cs" />
     <Compile Include="PartPreviewWindow\ViewControls2D.cs" />
     <Compile Include="PartPreviewWindow\BaseClasses\PartPreview3DWidget.cs" />
+    <Compile Include="PartPreviewWindow\ViewGcodeWidget.cs" />
     <Compile Include="PrinterCommunication\ActivePrinterProfile.cs" />
-    <Compile Include="ConfigurationPage\ConfigurationPage.cs" />
+    <Compile Include="ConfigurationPage\PrinterConfigurationPage.cs" />
     <Compile Include="CustomWidgets\DisableableWidget.cs" />
     <Compile Include="CustomWidgets\ExportPrintItemWindow.cs" />
+    <Compile Include="PrinterCommunication\Io\PrinterIoBase.cs" />
+    <Compile Include="PrinterCommunication\Io\PrinterIoGCodeFile.cs" />
+    <Compile Include="PrinterCommunication\Io\PrinterIoInjectionFifo.cs" />
+    <Compile Include="PrintHistory\PrintHistoryData.cs" />
     <Compile Include="PrintLibrary\LibraryData.cs" />
     <Compile Include="PrintQueue\OptionsMenu\ExportToFolderFeedbackWindow.cs" />
     <Compile Include="EeProm\EePromMarlinSettings.cs" />
     <Compile Include="PrinterControls\EditLevelingSettingsWindow.cs" />
-    <Compile Include="PrintHistory\PrintHistoryListControl.cs" />
+    <Compile Include="PrintHistory\PrintHistoryDataView.cs" />
     <Compile Include="PrintHistory\PrintHistoryListItem.cs" />
     <Compile Include="PrintHistory\PrintHistoryWidget.cs" />
     <Compile Include="PrintQueue\QueueData.cs" />
     <Compile Include="SettingsManagement\OemSettings.cs" />
+    <Compile Include="SettingsManagement\PrinterSettings.cs" />
     <Compile Include="SlicerConfiguration\SettingsControlSelectors.cs" />
     <Compile Include="SlicerConfiguration\SlicePresetsWindow\SlicePresetDetailWidget.cs" />
     <Compile Include="SlicerConfiguration\SlicePresetsWindow\SlicePresetListWidget.cs" />
@@ -132,7 +146,6 @@
     <Compile Include="PrinterControls\EditTemperaturePresetsWindow.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="PrinterControls\SDCardManager.cs" />
     <Compile Include="PrinterControls\MacroControls.cs" />
     <Compile Include="PrinterControls\EditManualMovementSpeedsWindow.cs" />
     <Compile Include="PrinterControls\EditMacrosWindow.cs" />
@@ -145,7 +158,7 @@
     <Compile Include="Testing\ReleaseTests.cs" />
     <Compile Include="Testing\TestingDispatch.cs" />
     <Compile Include="ApplicationView\WidescreenPanel.cs" />
-    <Compile Include="ConfigurationPage\PrintLevelWizard.cs" />
+    <Compile Include="ConfigurationPage\PrintLeveling\PrintLevelPages.cs" />
     <Compile Include="AboutPage\ContactForm.cs" />
     <Compile Include="CustomWidgets\ClickWidget.cs">
       <DependentUpon>ExportPrintItemWindow.cs</DependentUpon>
@@ -176,8 +189,8 @@
     <Compile Include="PartPreviewWindow\PartPreviewMainWindow.cs" />
     <Compile Include="PrintQueue\OptionsMenu\PartsSheetCreator.cs" />
     <Compile Include="Utilities\WebUtilities\JsonResponseDictionary.cs" />
-    <Compile Include="PrinterCommunication\PrinterCommunication.cs" />
-    <Compile Include="PrinterControls\PrintLeveling.cs" />
+    <Compile Include="PrinterCommunication\PrinterConnectionAndCommunication.cs" />
+    <Compile Include="PrinterControls\PrintLevelingPlane.cs" />
     <Compile Include="PrinterControls\OutputScrollWindow.cs" />
     <Compile Include="PrinterControls\PrinterConnections\ChooseConnectionWidget.cs" />
     <Compile Include="PrinterControls\PrinterConnections\SetupStepComPortManual.cs" />
@@ -229,6 +242,7 @@
     <Compile Include="EeProm\EePromRepetierWidget.cs" />
     <Compile Include="EeProm\EePromRepetierStorage.cs" />
     <Compile Include="PartPreviewWindow\SaveAsWindow.cs" />
+    <Compile Include="DataStorage\SQLiteAndroid.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="ICSharpCode.SharpZipLib">
@@ -243,12 +257,6 @@
     <Reference Include="System.Management" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>Newtonsoft.Json.dll</HintPath>
-    </Reference>
-    <Reference Include="Community.CsharpSqlite.SQLiteClient">
-      <HintPath>Community.CsharpSqlite.SQLiteClient.dll</HintPath>
-    </Reference>
     <Reference Include="System.Core" />
     <Reference Include="Mono.Posix" />
     <Reference Include="nunit.framework">
@@ -256,6 +264,9 @@
     </Reference>
     <Reference Include="OpenTK">
       <HintPath>..\agg-sharp\PlatformWin32\OpenTK.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>..\agg-sharp\Newtonsoft.Json.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
@@ -305,6 +316,10 @@
       <Project>{DF6845CD-64C6-4263-8357-DA8066855739}</Project>
       <Name>MarchingSquares</Name>
     </ProjectReference>
+    <ProjectReference Include="..\agg-sharp\PlatformAbstract\PlatformAbstract.csproj">
+      <Project>{3E4AABA8-D85F-4922-88C6-5C1B2D2308FB}</Project>
+      <Name>PlatformAbstract</Name>
+    </ProjectReference>
     <ProjectReference Include="..\agg-sharp\RayTracer\RayTracer.csproj">
       <Project>{1E01ABE0-B494-4FE4-B0D6-540133286887}</Project>
       <Name>RayTracer</Name>
@@ -329,10 +344,6 @@
       <Project>{C46CA728-DD2F-4DD1-971A-AAA89D9DFF95}</Project>
       <Name>MatterSlice</Name>
     </ProjectReference>
-    <ProjectReference Include="Community.CsharpSqlite\Community.CsharpSqlite.csproj">
-      <Project>{F1653F20-D47D-4F29-8C55-3C835542AF5F}</Project>
-      <Name>Community.CsharpSqlite</Name>
-    </ProjectReference>
     <ProjectReference Include="..\agg-sharp\examples\MeshViewer\MeshViewer.csproj">
       <Project>{A737BC76-165B-46C6-82B7-8871C7C92942}</Project>
       <Name>MeshViewer</Name>
@@ -340,6 +351,10 @@
     <ProjectReference Include="..\agg-sharp\Tesselate\Tesselate.csproj">
       <Project>{AE37DE1F-22F7-49EE-8732-FC6BC8DC58D9}</Project>
       <Name>Tesselate</Name>
+    </ProjectReference>
+    <ProjectReference Include="Community.CsharpSqlite\Community.CsharpSqlite.csproj">
+      <Project>{F1653F20-D47D-4F29-8C55-3C835542AF5F}</Project>
+      <Name>Community.CsharpSqlite</Name>
     </ProjectReference>
     <ProjectReference Include="Launcher\Launcher.csproj">
       <Project>{3DF4CB3D-9A03-4256-9A81-70523AAD828B}</Project>
@@ -373,7 +388,7 @@
       <Project>{865172A0-A1A9-49C2-9386-F2FDB4E141B7}</Project>
       <Name>MatterControlPluginSystem</Name>
     </ProjectReference>
-    <ProjectReference Include="..\agg-sharp\Agg\Agg.csproj">
+    <ProjectReference Include="..\agg-sharp\agg\Agg.csproj">
       <Project>{657DBC6D-C3EA-4398-A3FA-DDB73C14F71B}</Project>
       <Name>Agg</Name>
     </ProjectReference>

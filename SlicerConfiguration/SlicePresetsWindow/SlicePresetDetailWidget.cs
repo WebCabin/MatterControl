@@ -68,7 +68,7 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
                 initSlicePreset();
             }
 
-            linkButtonFactory.fontSize = 10;
+            linkButtonFactory.fontSize = 8;
             linkButtonFactory.textColor = ActiveTheme.Instance.SecondaryAccentColor;
 
             buttonFactory = new TextImageButtonFactory();
@@ -147,7 +147,7 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
         SettingsDropDownList settingDropDownList;
 
         FlowLayoutWidget addSettingsContainer;
-        FlowLayoutWidget settingsRowContainer;
+        PresetListControl settingsRowContainer;
         FlowLayoutWidget errorMessageContainer;
 
         FlowLayoutWidget GetMiddleRow()
@@ -187,9 +187,8 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
             addContainer.AddChild(addSettingsContainer);
             addContainer.AddChild(errorMessageContainer);
 
-            settingsRowContainer = new FlowLayoutWidget(FlowDirection.TopToBottom);
+            settingsRowContainer = new PresetListControl();
             settingsRowContainer.HAnchor = HAnchor.ParentLeftRight;
-            settingsRowContainer.Padding = new BorderDouble(3);
 
             LoadSettingsRows();
 
@@ -304,6 +303,7 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
             string UserLevel = "Advanced"; //Show all settings
             for (int categoryIndex = 0; categoryIndex < SliceSettingsOrganizer.Instance.UserLevels[UserLevel].CategoriesList.Count; categoryIndex++)
             {      
+                
                 OrganizerCategory category = SliceSettingsOrganizer.Instance.UserLevels[UserLevel].CategoriesList[categoryIndex];
                 
                 //Always add all categories
@@ -331,19 +331,21 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
                             //Add settings if within selected category and group or no category selected
                             if (selectedGroupValue == groupValue || (groupDefaultIndex == -1 && categoryIndex == categoryDefaultIndex) || categoryDefaultIndex == -1)
                             {
-                                
-
                                 OrganizerSettingsData setting = subgroup.SettingDataList[settingIndex];
-                                string itemValue = "{0}:{1}:{2}".FormatWith(categoryIndex, groupIndex, setting.SlicerConfigName);
-                                string itemName = setting.PresentationName.Replace("\\n","").Replace(":","");                                
-                                if (setting.ExtraSettings.Trim() != "" && setting.DataEditType != OrganizerSettingsData.DataEditTypes.LIST)
-                                {
-                                    itemName = "{0} ({1})".FormatWith(itemName, setting.ExtraSettings.Replace("\\n"," "));
-                                }
 
-                                MenuItem settingMenuItem = settingDropDownList.AddItem(itemName, itemValue);
-                                settingMenuItem.Selected += new EventHandler(OnItemSelected);
-                                settingMenuItem.Selected += new EventHandler(OnSettingSelected);
+                                if (setting.DataEditType != OrganizerSettingsData.DataEditTypes.HARDWARE_PRESENT)
+                                {
+                                    string itemValue = "{0}:{1}:{2}".FormatWith(categoryIndex, groupIndex, setting.SlicerConfigName);
+                                    string itemName = setting.PresentationName.Replace("\\n", "").Replace(":", "");
+                                    if (setting.ExtraSettings.Trim() != "" && setting.DataEditType != OrganizerSettingsData.DataEditTypes.LIST)
+                                    {
+                                        itemName = "{0} ({1})".FormatWith(itemName, setting.ExtraSettings.Replace("\\n", " "));
+                                    }
+
+                                    MenuItem settingMenuItem = settingDropDownList.AddItem(itemName, itemValue);
+                                    settingMenuItem.Selected += new EventHandler(OnItemSelected);
+                                    settingMenuItem.Selected += new EventHandler(OnSettingSelected);
+                                }
                             }
                         }
                     }
@@ -383,7 +385,7 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
 
         void LoadSettingsRows()
         {
-            settingsRowContainer.RemoveAllChildren();
+            settingsRowContainer.RemoveScrollChildren();
             UiThread.RunOnIdle((state) =>
             {
                 foreach (KeyValuePair<String, DataStorage.SliceSetting> item in this.windowController.ActivePresetLayer.settingsDictionary)
@@ -393,7 +395,9 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
                     row.Padding = new BorderDouble(3, 3, 3, 6);
 
                     settingsRowContainer.AddChild(row);
-                    settingsRowContainer.AddChild(new HorizontalLine());
+                    HorizontalLine horizontalLine = new HorizontalLine();
+                    horizontalLine.BackgroundColor = ActiveTheme.Instance.SecondaryTextColor;
+                    settingsRowContainer.AddChild(horizontalLine);
                 }
             });
         }
@@ -550,7 +554,7 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
                 
 
                 switch (settingData.DataEditType)
-                {
+                {                    
                     case OrganizerSettingsData.DataEditTypes.INT:
                         {
                             int currentValue = 0;
@@ -684,6 +688,10 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
                             }
                             container.AddChild(selectableOptions);
                         }
+                        break;
+
+                    case OrganizerSettingsData.DataEditTypes.HARDWARE_PRESENT:
+                        // this is not editable for a detail setting (quality or material)
                         break;
 
                     case OrganizerSettingsData.DataEditTypes.VECTOR2:
@@ -964,6 +972,40 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
             windowController.ActivePresetLayer.settingsCollectionData.Name = presetNameInput.Text;
             windowController.ActivePresetLayer.settingsCollectionData.Commit();
             CommitChanges();
+        }
+    }
+
+    class PresetListControl : ScrollableWidget
+    {
+        FlowLayoutWidget topToBottomItemList;
+            
+        public PresetListControl()
+        {                
+            this.AnchorAll();
+            this.AutoScroll = true;
+            this.ScrollArea.HAnchor |= Agg.UI.HAnchor.ParentLeftRight;
+                              
+            topToBottomItemList = new FlowLayoutWidget(FlowDirection.TopToBottom);
+            topToBottomItemList.HAnchor = Agg.UI.HAnchor.Max_FitToChildren_ParentWidth;
+            topToBottomItemList.Margin = new BorderDouble(top: 3);
+                
+            base.AddChild(topToBottomItemList);
+        }
+
+        public void RemoveScrollChildren()
+        {
+            topToBottomItemList.RemoveAllChildren();
+        }
+
+        public override void AddChild(GuiWidget child, int indexInChildrenList = -1)
+        {
+            FlowLayoutWidget itemHolder = new FlowLayoutWidget();
+            itemHolder.Margin = new BorderDouble(0, 0, 0, 0);
+            itemHolder.HAnchor = Agg.UI.HAnchor.Max_FitToChildren_ParentWidth;
+            itemHolder.AddChild(child);
+            itemHolder.VAnchor = VAnchor.FitToChildren;
+
+            topToBottomItemList.AddChild(itemHolder, indexInChildrenList);
         }
     }
 

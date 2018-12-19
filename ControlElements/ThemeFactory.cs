@@ -40,7 +40,6 @@ using MatterHackers.Agg.Font;
 using MatterHackers.VectorMath;
 
 using MatterHackers.MatterControl;
-using MatterHackers.MatterControl.PrintQueue;
 using MatterHackers.MatterControl.DataStorage;
 using MatterHackers.MatterControl.SettingsManagement;
 
@@ -294,7 +293,7 @@ namespace MatterHackers.MatterControl
                 this.tabLabelSelectedColor = new RGBA_Bytes(255, 255, 255);
                 this.tabLabelUnselectedColor = new RGBA_Bytes(180, 180, 180);
                 this.primaryTextColor = new RGBA_Bytes(255, 255, 255);
-                this.secondaryTextColor = new RGBA_Bytes(240, 240, 240);
+                this.secondaryTextColor = new RGBA_Bytes(200, 200, 200);
 
             }
             else

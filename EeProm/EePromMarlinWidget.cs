@@ -29,12 +29,10 @@ either expressed or implied, of the FreeBSD Project.
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-
 using MatterHackers.Agg;
 using MatterHackers.Agg.UI;
 using MatterHackers.Localizations;
+using MatterHackers.MatterControl.PrinterCommunication;
 
 namespace MatterHackers.MatterControl.EeProm
 {
@@ -86,6 +84,8 @@ namespace MatterHackers.MatterControl.EeProm
         TextImageButtonFactory textImageButtonFactory = new TextImageButtonFactory();
         double maxWidthOfLeftStuff = 0;
         List<GuiWidget> leftStuffToSize = new List<GuiWidget>();
+
+        int currentTabIndex = 0;
 
         public EePromMarlinWidget()
             : base(700, 480)
@@ -182,13 +182,13 @@ namespace MatterHackers.MatterControl.EeProm
 
                 CreateSpacer(bottomButtonBar);
 
-                CreateMainButton(ref buttonAbort, bottomButtonBar, "Cancel");
+                CreateMainButton(ref buttonAbort, bottomButtonBar, "Close");
                 buttonAbort.Click += buttonAbort_Click;
 
 				mainContainer.AddChild(bottomButtonBar);
             }
 
-            PrinterCommunication.Instance.CommunicationUnconditionalFromPrinter.RegisterEvent(currentEePromSettings.Add, ref unregisterEvents);
+            PrinterConnectionAndCommunication.Instance.CommunicationUnconditionalFromPrinter.RegisterEvent(currentEePromSettings.Add, ref unregisterEvents);
 
             currentEePromSettings.eventAdded += SetUiToPrinterSettings;
 
@@ -267,28 +267,43 @@ namespace MatterHackers.MatterControl.EeProm
             leftStuffToSize.Add(holder);
             row.AddChild(holder);
 
-            row.AddChild(CreateTextField(field1Label));
-            row.AddChild(CreateMHNumEdit(ref field1));
+            {
+                row.AddChild(CreateTextField(field1Label));
+                GuiWidget nextTabIndex = CreateMHNumEdit(ref field1);
+                nextTabIndex.TabIndex = GetNextTabIndex();
+                row.AddChild(nextTabIndex);
+            }
 
             if (field2Label != null)
             {
                 row.AddChild(CreateTextField(field2Label));
-                row.AddChild(CreateMHNumEdit(ref field2));
+                GuiWidget nextTabIndex = CreateMHNumEdit(ref field2);
+                nextTabIndex.TabIndex = GetNextTabIndex();
+                row.AddChild(nextTabIndex);
             }
 
             if (field3Label != null)
             {
                 row.AddChild(CreateTextField(field3Label));
-                row.AddChild(CreateMHNumEdit(ref field3));
+                GuiWidget nextTabIndex = CreateMHNumEdit(ref field3);
+                nextTabIndex.TabIndex = GetNextTabIndex();
+                row.AddChild(nextTabIndex);
             }
 
             if (field4Label != null)
             {
                 row.AddChild(CreateTextField(field4Label));
-                row.AddChild(CreateMHNumEdit(ref field4));
+                GuiWidget nextTabIndex = CreateMHNumEdit(ref field4);
+                nextTabIndex.TabIndex = GetNextTabIndex();
+                row.AddChild(nextTabIndex);
             }
 
             return row;
+        }
+
+        private int GetNextTabIndex()
+        {
+            return currentTabIndex++;
         }
 
         private static void CreateSpacer(FlowLayoutWidget buttonBar)

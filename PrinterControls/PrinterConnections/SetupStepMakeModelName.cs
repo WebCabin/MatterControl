@@ -1,20 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.IO;
-using System.IO.Ports;
-using System.Diagnostics;
-
 using MatterHackers.Agg;
+using MatterHackers.Agg.PlatformAbstract;
 using MatterHackers.Agg.UI;
-using MatterHackers.Agg.OpenGlGui;
-using MatterHackers.PolygonMesh;
-using MatterHackers.RenderOpenGl;
-using MatterHackers.VectorMath;
-using MatterHackers.MatterControl.DataStorage;
-using MatterHackers.MatterControl.PrintQueue;
 using MatterHackers.Localizations;
+using MatterHackers.MatterControl.ConfigurationPage.PrintLeveling;
+using MatterHackers.MatterControl.DataStorage;
 
 namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
 {   
@@ -202,6 +194,20 @@ namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
                 ActivePrinter.BaudRate = baudRate;
             }
 
+            // Check if we need to run the print level wizard before printing
+            PrintLevelingData levelingData = PrintLevelingData.GetForPrinter(ActivePrinter);
+            string needsPrintLeveling;
+            if (settingsDict.TryGetValue("needs_print_leveling", out needsPrintLeveling))
+            {
+                levelingData.needsPrintLeveling = true;
+            }
+
+            string printLevelingType;
+            if (settingsDict.TryGetValue("print_leveling_type", out printLevelingType))
+            {
+                levelingData.levelingSystem = PrintLevelingData.LevelingSystem.Probe2Points;
+            }
+
             string defaultSliceEngine;
             if (settingsDict.TryGetValue("default_slice_engine", out defaultSliceEngine))
             {
@@ -238,9 +244,9 @@ namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
             if (settingsDict.TryGetValue("windows_driver", out driverFile))
             {
                 string infPathAndFileToInstall = Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath, "Drivers", driverFile);
-                switch (MatterHackers.Agg.UI.WindowsFormsAbstract.GetOSType())
+                switch (OsInformation.OperatingSystem)
                 {
-                    case Agg.UI.WindowsFormsAbstract.OSType.Windows:
+                    case OSType.Windows:
                         if (File.Exists(infPathAndFileToInstall))
                         {
                             PrinterSetupStatus.DriverNeedsToBeInstalled = true;
@@ -253,8 +259,6 @@ namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
                 }
             }
         }
-
-
 
         private Dictionary<string, string> LoadPrinterSetupFromFile(string make, string model)
         {

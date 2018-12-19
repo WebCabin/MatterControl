@@ -1,19 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.IO;
-using System.IO.Ports;
-using System.Diagnostics;
-
 using MatterHackers.Agg;
 using MatterHackers.Agg.UI;
-using MatterHackers.Agg.OpenGlGui;
-using MatterHackers.PolygonMesh;
-using MatterHackers.RenderOpenGl;
-using MatterHackers.VectorMath;
-using MatterHackers.MatterControl.DataStorage;
 using MatterHackers.Localizations;
+using MatterHackers.MatterControl.DataStorage;
+using MatterHackers.MatterControl.PrinterCommunication;
+using MatterHackers.SerialPortCommunication.FrostedSerial;
 
 namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
 {
@@ -71,7 +63,7 @@ namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
                 this.ActivePrinter.BaudRate = "250000";
                 try
                 {
-                    this.ActivePrinter.ComPort = SerialPort.GetPortNames()[0];
+                    this.ActivePrinter.ComPort = FrostedSerialPort.GetPortNames()[0];
                 }
                 catch
                 {
@@ -91,7 +83,7 @@ namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
                 {
                     try
                     {
-                        this.ActivePrinter.ComPort = SerialPort.GetPortNames()[0];
+                        this.ActivePrinter.ComPort = FrostedSerialPort.GetPortNames()[0];
                     }
                     catch
                     {
@@ -147,7 +139,7 @@ namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
                 
 
                 int portIndex = 0;
-                foreach (string serialPort in SerialPort.GetPortNames())
+                foreach (string serialPort in FrostedSerialPort.GetPortNames())
                 {
                     //Filter com port list based on usb type (applies to Mac mostly)
                     bool looks_like_mac = serialPort.StartsWith("/dev/tty.");
@@ -164,7 +156,7 @@ namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
                 if (portIndex == 0)
                 {
 
-                    foreach (string serialPort in SerialPort.GetPortNames())
+                    foreach (string serialPort in FrostedSerialPort.GetPortNames())
                     {
                         SerialPortIndexRadioButton comPortOption = createComPortOption(serialPort);
                         comPortContainer.AddChild(comPortOption);
@@ -435,7 +427,7 @@ namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
 
         void CloseWindow(object o, MouseEventArgs e)
         {
-            PrinterCommunication.Instance.HaltConnectionThread();
+            PrinterConnectionAndCommunication.Instance.HaltConnectionThread();
             this.containerWindowToClose.Close();
         }
 

@@ -36,24 +36,18 @@ using System.Text;
 using System.Threading;
 using MatterHackers.Agg;
 using MatterHackers.Agg.UI;
+using MatterHackers.Localizations;
 using MatterHackers.MatterControl.DataStorage;
 using MatterHackers.MatterControl.PartPreviewWindow;
 using MatterHackers.MatterControl.PluginSystem;
+using MatterHackers.MatterControl.PrinterCommunication;
 using MatterHackers.MatterControl.PrintQueue;
-using MatterHackers.MatterControl.SlicerConfiguration;
 using MatterHackers.MatterControl.SettingsManagement;
+using MatterHackers.MatterControl.SlicerConfiguration;
 using MatterHackers.VectorMath;
 
 namespace MatterHackers.MatterControl
 {
-    public static class MainScreenUiState
-    {
-        public static readonly int EmpytValue = -2;
-        public static int lastMainScreenTabIndex = 0;
-        public static int lastSelectedIndex = EmpytValue;
-        public static int lastAdvancedControlsTab = EmpytValue;
-    }
-
     public class MatterControlApplication : SystemWindow
     {
         string[] commandLineArgs = null;
@@ -65,6 +59,8 @@ namespace MatterHackers.MatterControl
         public MatterControlApplication(double width, double height)
             : base(width, height)
         {
+            CrashTracker.Reset();
+
             this.commandLineArgs = Environment.GetCommandLineArgs();
             Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
@@ -142,7 +138,6 @@ namespace MatterHackers.MatterControl
                 Title = Title + " - {1}".FormatWith(version, OemSettings.Instance.WindowTitleExtra);
             }
 
-            ActivePrinterProfile.CheckForAndDoAutoConnect();
             UiThread.RunOnIdle(CheckOnPrinter);
 
             MinimumSize = new Vector2(590, 630);
@@ -199,7 +194,7 @@ namespace MatterHackers.MatterControl
 
         void CheckOnPrinter(object state)
         {
-            PrinterCommunication.Instance.OnIdle();
+            PrinterConnectionAndCommunication.Instance.OnIdle();
             UiThread.RunOnIdle(CheckOnPrinter);
         }
 
@@ -276,15 +271,22 @@ namespace MatterHackers.MatterControl
 
             if (firstDraw)
             {
+                UiThread.RunOnIdle(DoAutoConnectIfRequired);
+
                 firstDraw = false;
                 foreach (string arg in commandLineArgs)
                 {
                     if (Path.GetExtension(arg).ToUpper() == ".STL")
                     {
-                        new PartPreviewMainWindow(new PrintItemWrapper(new DataStorage.PrintItem(Path.GetFileName(arg), Path.GetFullPath(arg))));
+                        new PartPreviewMainWindow(new PrintItemWrapper(new DataStorage.PrintItem(Path.GetFileName(arg), Path.GetFullPath(arg))), View3DTransformPart.AutoRotate.Enabled);
                     }
                 }
             }
+        }
+
+        public void DoAutoConnectIfRequired(object state)
+        {
+            ActivePrinterProfile.CheckForAndDoAutoConnect();
         }
 
         public override void OnMouseMove(MouseEventArgs mouseEvent)
@@ -317,13 +319,10 @@ namespace MatterHackers.MatterControl
 
         public override void OnClosed(EventArgs e)
         {
-            // save the last size of the window so we can restore it next time.
-            ApplicationSettings.Instance.set("WindowSize", string.Format("{0},{1}", Width, Height));
-            ApplicationSettings.Instance.set("DesktopPosition", string.Format("{0},{1}", DesktopPosition.x, DesktopPosition.y));
-            PrinterCommunication.Instance.Disable();
+            PrinterConnectionAndCommunication.Instance.Disable();
             //Close connection to the local datastore
             Datastore.Instance.Exit();
-            PrinterCommunication.Instance.HaltConnectionThread();
+            PrinterConnectionAndCommunication.Instance.HaltConnectionThread();
             SlicingQueue.Instance.ShutDownSlicingThread();
             if (RestartOnClose)
             {
@@ -341,19 +340,27 @@ namespace MatterHackers.MatterControl
             base.OnClosed(e);
         }
 
+        string unableToExitMessage = "Oops! You cannot exit while a print is active.".Localize();
+        string unableToExitTitle = "Unable to Exit".Localize();
+        string savePartsSheetExitAnywayMessage = "You are currently saving a parts sheet, are you sure you want to exit?".Localize();
+        string confirmExit = "Confirm Exit".Localize();
         public override void OnClosing(out bool CancelClose)
         {
+            // save the last size of the window so we can restore it next time.
+            ApplicationSettings.Instance.set("WindowSize", string.Format("{0},{1}", Width, Height));
+            ApplicationSettings.Instance.set("DesktopPosition", string.Format("{0},{1}", DesktopPosition.x, DesktopPosition.y));
+
             //Save a snapshot of the prints in queue
             QueueData.Instance.SaveDefaultQueue();
 
-            if (PrinterCommunication.Instance.PrinterIsPrinting)
+            if (PrinterConnectionAndCommunication.Instance.PrinterIsPrinting)
             {
-				StyledMessageBox.ShowMessageBox("Oops! You cannot exit while a print is active.", "Unable to Exit");
+                StyledMessageBox.ShowMessageBox(unableToExitMessage, unableToExitTitle);
                 CancelClose = true;
             }
             else if (PartsSheet.IsSaving())
             {
-                if (!StyledMessageBox.ShowMessageBox("You are currently saving a parts sheet, are you sure you want to exit?", "Confirm Exit", StyledMessageBox.MessageType.YES_NO))
+                if (!StyledMessageBox.ShowMessageBox(savePartsSheetExitAnywayMessage, confirmExit, StyledMessageBox.MessageType.YES_NO))
                 {
                     CancelClose = true;
                 }

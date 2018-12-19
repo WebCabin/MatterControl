@@ -1,23 +1,15 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.IO;
-
-
-
 using MatterHackers.Agg;
-using MatterHackers.Agg.Transform;
-using MatterHackers.Agg.Image;
-using MatterHackers.Agg.VertexSource;
 using MatterHackers.Agg.UI;
-using MatterHackers.Agg.Font;
-using MatterHackers.VectorMath;
-
-using MatterHackers.MatterControl.PrintQueue;
+using MatterHackers.Localizations;
 using MatterHackers.MatterControl.CustomWidgets;
 using MatterHackers.MatterControl.DataStorage;
-using MatterHackers.Localizations;
+using MatterHackers.MatterControl.ContactForm;
+using MatterHackers.MatterControl.PrinterCommunication;
+using MatterHackers.MatterControl.PrinterControls.PrinterConnections;
+using MatterHackers.MatterControl.PrintQueue;
+using MatterHackers.VectorMath;
 
 namespace MatterHackers.MatterControl
 {
@@ -126,6 +118,7 @@ namespace MatterHackers.MatterControl
         {
             menuItems = new TupleList<string, Func<bool>> 
             {                
+                {LocalizedString.Get("Add Printer"), addPrinter_Click},
                 {LocalizedString.Get("Add File"), importFile_Click},
 				{LocalizedString.Get("Exit"), exit_Click},
             };
@@ -138,6 +131,16 @@ namespace MatterHackers.MatterControl
                 MenuDropList.AddItem(item.Item1,pointSize:10);
             }            
             MenuDropList.Padding = padding;
+        }
+
+
+        bool addPrinter_Click()
+        {
+            UiThread.RunOnIdle((state) =>
+            { 
+                ConnectionWindow.Show();
+            });
+            return true;
         }
 			
         bool importFile_Click()
@@ -160,6 +163,8 @@ namespace MatterHackers.MatterControl
             return true;
         }
 
+        string cannotExitWhileActiveMessage = "Oops! You cannot exit while a print is active.".Localize();
+        string cannotExitWhileActiveTitle = "Unable to Exit";
 		bool exit_Click()
         {
             UiThread.RunOnIdle((state) =>
@@ -170,9 +175,9 @@ namespace MatterHackers.MatterControl
                     parent = parent.Parent;
                 }
 
-				if(PrinterCommunication.Instance.PrinterIsPrinting)
+				if(PrinterConnectionAndCommunication.Instance.PrinterIsPrinting)
 				{
-						StyledMessageBox.ShowMessageBox("Oops! You cannot exit while a print is active.", "Unable to Exit");
+						StyledMessageBox.ShowMessageBox(cannotExitWhileActiveMessage, cannotExitWhileActiveTitle);
 				}
 				else
 				{
@@ -233,7 +238,9 @@ namespace MatterHackers.MatterControl
             {                
                 {LocalizedString.Get("Getting Started"), gettingStarted_Click},
                 {LocalizedString.Get("View Help"), help_Click},
-                {LocalizedString.Get("About"), about_Click},
+                {LocalizedString.Get("Report a Bug"), bug_Click},
+				{LocalizedString.Get("Release Notes"), notes_Click},
+                {LocalizedString.Get("About MatterControl"), about_Click},
             };
 
             BorderDouble padding = MenuDropList.MenuItemsPadding;
@@ -244,6 +251,17 @@ namespace MatterHackers.MatterControl
                 MenuDropList.AddItem(item.Item1, pointSize: 10);
             }
             MenuDropList.Padding = padding;
+        }
+
+
+        bool bug_Click()
+        {
+            
+            UiThread.RunOnIdle((state) =>
+            {
+                ContactFormWindow.Open();
+            });
+            return true;
         }
 
         bool help_Click()
@@ -259,10 +277,19 @@ namespace MatterHackers.MatterControl
         {
             UiThread.RunOnIdle((state) =>
             {
-                System.Diagnostics.Process.Start("http://www.mattercontrol.com/");
-            });
+                AboutWindow.Show();
+            });            
             return true;
         }
+
+		bool notes_Click()
+		{
+			UiThread.RunOnIdle((state) =>
+				{
+					System.Diagnostics.Process.Start("http://wiki.mattercontrol.com/Release_Notes");
+				});            
+			return true;
+		}
 
         bool gettingStarted_Click()
         {

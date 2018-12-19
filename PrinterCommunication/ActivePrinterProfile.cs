@@ -28,28 +28,19 @@ either expressed or implied, of the FreeBSD Project.
 */
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.IO.Ports;
-using System.Threading;
-using System.Diagnostics;
-using System.Collections;
-using System.IO;
-using System.Runtime.InteropServices;
-using System.Globalization;
-
-using MatterHackers.Agg;
 using MatterHackers.Agg.UI;
-using MatterHackers.VectorMath;
-using MatterHackers.MatterControl.ContactForm;
+using MatterHackers.MatterControl.ConfigurationPage.PrintLeveling;
 using MatterHackers.MatterControl.DataStorage;
-using MatterHackers.Localizations;
+using MatterHackers.MatterControl.PrinterCommunication;
 using MatterHackers.MatterControl.SlicerConfiguration;
+using MatterHackers.SerialPortCommunication.FrostedSerial;
 
 namespace MatterHackers.MatterControl
 {
-    public class TepmRootedObjectEventHandler
+    public class TempRootedObjectEventHandler
     {
 #if DEBUG
         private event EventHandler InternalEventForDebug;
@@ -114,7 +105,7 @@ namespace MatterHackers.MatterControl
         static ActivePrinterProfile globalInstance = null;
 
         public RootedObjectEventHandler ActivePrinterChanged = new RootedObjectEventHandler();
-        public TepmRootedObjectEventHandler DoPrintLevelingChanged = new TepmRootedObjectEventHandler();
+        public TempRootedObjectEventHandler DoPrintLevelingChanged = new TempRootedObjectEventHandler();
 
         // private so that it can only be gotten through the Instance
         ActivePrinterProfile()
@@ -129,7 +120,7 @@ namespace MatterHackers.MatterControl
             {
                 if (activePrinter != value)
                 {
-                    PrinterCommunication.Instance.Disable();
+                    PrinterConnectionAndCommunication.Instance.Disable();
 
                     activePrinter = value;
                     ValidateMaterialSettings();
@@ -340,48 +331,14 @@ namespace MatterHackers.MatterControl
 
                     if (DoPrintLeveling)
                     {
-                        PrintLeveling.Instance.SetPrintLevelingEquation(
-                            GetPrintLevelingMeasuredPosition(0),
-                            GetPrintLevelingMeasuredPosition(1),
-                            GetPrintLevelingMeasuredPosition(2),
+                        PrintLevelingData levelingData = PrintLevelingData.GetForPrinter(ActivePrinterProfile.Instance.ActivePrinter);
+                        PrintLevelingPlane.Instance.SetPrintLevelingEquation(
+                            levelingData.sampledPosition0,
+                            levelingData.sampledPosition1,
+                            levelingData.sampledPosition2,
                             ActiveSliceSettings.Instance.PrintCenter);
                     }
                 }
-            }
-        }
-
-        /// <summary>
-        /// This function returns one of the three positions as it was actually measured
-        /// </summary>
-        /// <param name="position0To2"></param>
-        /// <returns></returns>
-        public Vector3 GetPrintLevelingMeasuredPosition(int position0To2)
-        {
-            if (ActivePrinter != null)
-            {
-                double[] positions = ActivePrinter.GetPrintLevelingMeasuredPositions();
-                switch (position0To2)
-                {
-                    case 0:
-                        return new Vector3(positions[0], positions[1], positions[2]);
-                    case 1:
-                        return new Vector3(positions[3], positions[4], positions[5]);
-                    case 2:
-                        return new Vector3(positions[6], positions[7], positions[8]);
-                    default:
-                        throw new Exception("there are only 3 probe positions.");
-                }
-            }
-
-            return Vector3.Zero;
-        }
-
-        public void SetPrintLevelingMeasuredPositions(double[] printLevelingPositions3_xyz)
-        {
-            if (ActivePrinter != null)
-            {
-                ActivePrinter.SetPrintLevelingMeasuredPositions(printLevelingPositions3_xyz);
-                ActivePrinter.Commit();
             }
         }
 
@@ -391,8 +348,8 @@ namespace MatterHackers.MatterControl
             if (autoConnectProfile != null)
             {
                 ActivePrinterProfile.Instance.ActivePrinter = autoConnectProfile;
-                PrinterCommunication.Instance.HaltConnectionThread();
-                PrinterCommunication.Instance.ConnectToActivePrinter();
+                PrinterConnectionAndCommunication.Instance.HaltConnectionThread();
+                PrinterConnectionAndCommunication.Instance.ConnectToActivePrinter();
             }
         }
 
@@ -400,7 +357,7 @@ namespace MatterHackers.MatterControl
         {
             string query = string.Format("SELECT * FROM Printer;");
             IEnumerable<Printer> printer_profiles = (IEnumerable<Printer>)Datastore.Instance.dbSQLite.Query<Printer>(query);
-            string[] comportNames = SerialPort.GetPortNames();
+            string[] comportNames = FrostedSerialPort.GetPortNames();
 
             foreach (DataStorage.Printer printer in printer_profiles)
             {

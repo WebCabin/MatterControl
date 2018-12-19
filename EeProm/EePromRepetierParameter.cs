@@ -31,6 +31,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using MatterHackers.MatterControl.PrinterCommunication;
 
 namespace MatterHackers.MatterControl.EeProm
 {
@@ -67,7 +68,7 @@ namespace MatterHackers.MatterControl.EeProm
             string cmd = "M206 T" + type + " P" + position + " ";
             if (type == 3) cmd += "X" + val;
             else cmd += "S" + val;
-            PrinterCommunication.Instance.SendLineToPrinterNow(cmd);
+            PrinterConnectionAndCommunication.Instance.SendLineToPrinterNow(cmd);
             changed = false;
         }
 

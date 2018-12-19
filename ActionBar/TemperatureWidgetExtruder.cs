@@ -38,6 +38,7 @@ using MatterHackers.Localizations;
 using MatterHackers.MatterControl.PrintQueue;
 using MatterHackers.MatterControl.SlicerConfiguration;
 using MatterHackers.VectorMath;
+using MatterHackers.MatterControl.PrinterCommunication;
 
 namespace MatterHackers.MatterControl.ActionBar
 {
@@ -54,7 +55,7 @@ namespace MatterHackers.MatterControl.ActionBar
         event EventHandler unregisterEvents;
         void AddHandlers()
         {
-            PrinterCommunication.Instance.ExtruderTemperatureRead.RegisterEvent(onTemperatureRead, ref unregisterEvents);
+            PrinterConnectionAndCommunication.Instance.ExtruderTemperatureRead.RegisterEvent(onTemperatureRead, ref unregisterEvents);
             this.MouseEnterBounds += onMouseEnterBounds;
             this.MouseLeaveBounds += onMouseLeaveBounds;
         }
@@ -81,42 +82,44 @@ namespace MatterHackers.MatterControl.ActionBar
         void setToCurrentTemperature()
         {
             string tempDirectionIndicator = "";
-            if (PrinterCommunication.Instance.TargetExtruderTemperature > 0)
+            if (PrinterConnectionAndCommunication.Instance.TargetExtruderTemperature > 0)
             {
-                if ((int)(PrinterCommunication.Instance.TargetExtruderTemperature + 0.5) < (int)(PrinterCommunication.Instance.ActualExtruderTemperature + 0.5))
+                if ((int)(PrinterConnectionAndCommunication.Instance.TargetExtruderTemperature + 0.5) < (int)(PrinterConnectionAndCommunication.Instance.ActualExtruderTemperature + 0.5))
                 {
                     tempDirectionIndicator = "↓";
                 }
-                else if ((int)(PrinterCommunication.Instance.TargetExtruderTemperature + 0.5) > (int)(PrinterCommunication.Instance.ActualExtruderTemperature + 0.5))
+                else if ((int)(PrinterConnectionAndCommunication.Instance.TargetExtruderTemperature + 0.5) > (int)(PrinterConnectionAndCommunication.Instance.ActualExtruderTemperature + 0.5))
                 {
                     tempDirectionIndicator = "↑";
                 }
             }
-            this.IndicatorValue = string.Format(" {0:0.#}°{1}", PrinterCommunication.Instance.ActualExtruderTemperature, tempDirectionIndicator);
+            this.IndicatorValue = string.Format(" {0:0.#}°{1}", PrinterConnectionAndCommunication.Instance.ActualExtruderTemperature, tempDirectionIndicator);
         }
 
         void onTemperatureRead(Object sender, EventArgs e)
         {
             setToCurrentTemperature();
-        }        
+        }
 
+        string sliceSettingsNote = "Note: Slice Settings are applied before the print actually starts. Changes while printing will not effect the active print.".Localize();
+        string waitingForeExtruderToHeatMessage = "The extruder is currently heating and its target temperature cannot be changed until it reaches {0}°C.\n\nYou can set the starting extruder temperature in 'Slice Settings' -> 'Filament'.\n\n{1}".Localize();
+        string waitingForeExtruderToHeatTitle = "Waiting For Extruder To Heat".Localize();
         protected override void SetTargetTemperature()
         {
             double targetTemp;
             if (double.TryParse(ActiveSliceSettings.Instance.GetActiveValue("first_layer_temperature"), out targetTemp))
             {
                 double goalTemp = (int)(targetTemp + .5);
-                if (PrinterCommunication.Instance.PrinterIsPrinting
-                    && PrinterCommunication.Instance.PrintingState == PrinterCommunication.DetailedPrintingState.HeatingExtruder
-                    && goalTemp != PrinterCommunication.Instance.TargetExtruderTemperature)
+                if (PrinterConnectionAndCommunication.Instance.PrinterIsPrinting
+                    && PrinterConnectionAndCommunication.Instance.PrintingState == PrinterConnectionAndCommunication.DetailedPrintingState.HeatingExtruder
+                    && goalTemp != PrinterConnectionAndCommunication.Instance.TargetExtruderTemperature)
                 {
-                    string sliceSettingsNote = "Note: Slice Settings are applied before the print actually starts. Changes while printing will not effect the active print.";
-                    string message = string.Format("The extruder is currently heating and its target temperature cannot be changed until it reaches {0}°C.\n\nYou can set the starting extruder temperature in 'Slice Settings' -> 'Filament'.\n\n{1}", PrinterCommunication.Instance.TargetExtruderTemperature, sliceSettingsNote);
-                    StyledMessageBox.ShowMessageBox(message, "Waiting For Extruder To Heat");
+                    string message = string.Format(waitingForeExtruderToHeatMessage, PrinterConnectionAndCommunication.Instance.TargetExtruderTemperature, sliceSettingsNote);
+                    StyledMessageBox.ShowMessageBox(message, waitingForeExtruderToHeatTitle);
                 }
                 else
                 {
-                    PrinterCommunication.Instance.TargetExtruderTemperature = (int)(targetTemp + .5);
+                    PrinterConnectionAndCommunication.Instance.TargetExtruderTemperature = (int)(targetTemp + .5);
                 }
             }
         }

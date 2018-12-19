@@ -32,6 +32,7 @@ using System.IO;
 using MatterHackers.Agg;
 using MatterHackers.Agg.Image;
 using MatterHackers.Agg.ImageProcessing;
+using MatterHackers.Agg.PlatformAbstract;
 using MatterHackers.Agg.UI;
 using MatterHackers.Agg.VertexSource;
 using MatterHackers.MatterControl.DataStorage;
@@ -180,7 +181,7 @@ namespace MatterHackers.MatterControl
 
         ImageBuffer LoadUpButtonImage(string imageName)
         {
-            string path = Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath, imageName);
+            string path = Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath, "Icons", imageName);
             ImageBuffer buffer = new ImageBuffer(10, 10, 32, new BlenderBGRA());
             ImageIO.LoadImageData(path, buffer);
 
@@ -195,7 +196,7 @@ namespace MatterHackers.MatterControl
         {
             FlowLayoutWidget groupLableAndEditControl = new FlowLayoutWidget();
 
-            editButton = new Button(0, 0, new ButtonViewThreeImage(LoadUpButtonImage("icon_edit_white.png"), LoadUpButtonImage("icon_edit_gray.png"), LoadUpButtonImage("icon_edit_Black.png")));
+			editButton = new Button(0, 0, new ButtonViewThreeImage(LoadUpButtonImage("icon_edit_white.png"), LoadUpButtonImage("icon_edit_gray.png"), LoadUpButtonImage("icon_edit_black.png")));
             editButton.Margin = new BorderDouble(2, -2, 2, 0);
             editButton.VAnchor = Agg.UI.VAnchor.ParentTop;
             TextWidget textLabel = new TextWidget(label, textColor: ActiveTheme.Instance.PrimaryTextColor);
@@ -253,7 +254,7 @@ namespace MatterHackers.MatterControl
 
         private string GetImageLocation(string imageName)
         {
-            return Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath, imageName);
+            return Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath, "Icons", imageName);
         }
 
         private ButtonViewStates getButtonView(string label, string normalImageName = null, string hoverImageName = null, string pressedImageName = null, string disabledImageName = null, bool centerText = false)

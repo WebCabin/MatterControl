@@ -89,10 +89,18 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
             new MapItem("moveSpeed", "travel_speed"),
             new AsPercentOfReferenceOrDirect("initialLayerSpeed", "first_layer_speed", "infill_speed"),
 
+            new MapItem("insetXSpeed", "perimeter_speed"),
+            new AsPercentOfReferenceOrDirect("inset0Speed", "external_perimeter_speed", "perimeter_speed"),
+
             new NotPassedItem("", "temperature"),
             new NotPassedItem("", "bed_temperature"),
             new NotPassedItem("", "bed_shape"),
 
+#if true
+            new NotPassedItem("", "has_fan"),
+            new NotPassedItem("", "has_heated_bed"),
+            new NotPassedItem("", "has_sd_card_reader"),
+#endif
 
             new ScaledSingleNumber("objectSink", "bottom_clip_amount", 1000),
 

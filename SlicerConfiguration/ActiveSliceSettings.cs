@@ -40,6 +40,7 @@ using MatterHackers.VectorMath;
 using MatterHackers.MatterControl.ContactForm;
 using MatterHackers.MatterControl.DataStorage;
 using MatterHackers.Localizations;
+using MatterHackers.MatterControl.ConfigurationPage.PrintLeveling;
 
 namespace MatterHackers.MatterControl.SlicerConfiguration
 {
@@ -115,50 +116,6 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
             }
         }
 
-
-
-        /// <summary>
-        /// This returns one of the three positions that should be probed when leveling
-        /// </summary>
-        /// <param name="index"></param>
-        /// <returns></returns>
-        public Vector2 GetPrintLevelPositionToSample(int index)
-        {
-            Vector2 bedSize = ActiveSliceSettings.Instance.BedSize;
-            Vector2 printCenter = ActiveSliceSettings.Instance.PrintCenter;
-
-            switch (BedShape)
-            {
-                case MeshVisualizer.MeshViewerWidget.BedShape.Circular:
-                    Vector2 firstPosition = new Vector2(printCenter.x, printCenter.y + (bedSize.y / 2) * .5);
-                    switch (index)
-                    {
-                        case 0:
-                            return firstPosition;
-                        case 1:
-                            return Vector2.Rotate(firstPosition, MathHelper.Tau / 3);
-                        case 2:
-                            return Vector2.Rotate(firstPosition, MathHelper.Tau * 2 / 3);
-                        default:
-                            throw new IndexOutOfRangeException();
-                    }
-
-                case MeshVisualizer.MeshViewerWidget.BedShape.Rectangular:
-                default:
-                    switch (index)
-                    {
-                        case 0:
-                            return new Vector2(printCenter.x, printCenter.y + (bedSize.y / 2) * .8);
-                        case 1:
-                            return new Vector2(printCenter.x - (bedSize.x / 2) * .8, printCenter.y - (bedSize.y / 2) * .8);
-                        case 2:
-                            return new Vector2(printCenter.x + (bedSize.x / 2) * .8, printCenter.y - (bedSize.y / 2) * .8);
-                        default:
-                            throw new IndexOutOfRangeException();
-                    }
-            }
-        }
-
         public void LoadAllSettings()
         {
             this.activeSettingsLayers = new List<SettingsLayer>();
@@ -170,10 +127,12 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
 
             if (ActivePrinterProfile.Instance.ActivePrinter != null)
             {
-                PrintLeveling.Instance.SetPrintLevelingEquation(
-                    ActivePrinterProfile.Instance.GetPrintLevelingMeasuredPosition(0),
-                    ActivePrinterProfile.Instance.GetPrintLevelingMeasuredPosition(1),
-                    ActivePrinterProfile.Instance.GetPrintLevelingMeasuredPosition(2),
+                PrintLevelingData levelingData = PrintLevelingData.GetForPrinter(ActivePrinterProfile.Instance.ActivePrinter);
+
+                PrintLevelingPlane.Instance.SetPrintLevelingEquation(
+                    levelingData.sampledPosition0,
+                    levelingData.sampledPosition1,
+                    levelingData.sampledPosition2,
                     ActiveSliceSettings.Instance.PrintCenter);
             }
             OnSettingsChanged();
@@ -231,6 +190,21 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
 
         }
 
+        public bool HasFan()
+        {
+            return GetActiveValue("has_fan") == "1";
+        }
+
+        public bool HasSdCardReader()
+        {
+            return GetActiveValue("has_sd_card_reader") == "1";
+        }
+
+        public bool HasHeatedBed()
+        {
+            return GetActiveValue("has_heated_bed") == "1";
+        }
+
         public Dictionary<string, DataStorage.SliceSetting> DefaultSettings
         {
             get
@@ -279,6 +253,24 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
                     string onlyNumber = firstLayerValueString.Replace("%", "");
                     double ratio = ParseDouble(onlyNumber) / 100;
                     return LayerHeight * ratio;
+                }
+                double firstLayerValue;
+                firstLayerValue = ParseDouble(firstLayerValueString);
+
+                return firstLayerValue;
+            }
+        }
+
+        public double FirstLayerExtrusionWidth
+        {
+            get
+            {
+                string firstLayerValueString = GetActiveValue("first_layer_extrusion_width");
+                if (firstLayerValueString.Contains("%"))
+                {
+                    string onlyNumber = firstLayerValueString.Replace("%", "");
+                    double ratio = ParseDouble(onlyNumber) / 100;
+                    return NozzleDiameter * ratio;
                 }
                 double firstLayerValue;
                 firstLayerValue = ParseDouble(firstLayerValueString);
@@ -668,6 +660,15 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
                     string error = LocalizedString.Get("First Layer Height' must be less than or equal to the 'Nozzle Diameter'.");
                     string details = string.Format("First Layer Height = {0}\nNozzle Diameter = {1}", FirstLayerHeight, NozzleDiameter);
                     string location = "Location: 'Advanced Controls' -> 'Slice Settings' -> 'Print' -> 'Layers/Perimeters'";
+                    StyledMessageBox.ShowMessageBox(string.Format("{0}\n\n{1}\n\n{2}", error, details, location), "Slice Error");
+                    return false;
+                }
+
+                if (FirstLayerExtrusionWidth > NozzleDiameter * 4)
+                {
+                    string error = LocalizedString.Get("First Layer Extrusion Width' must be less than or equal to the 'Nozzle Diameter' * 4.");
+                    string details = string.Format("First Layer Extrusion Width = {0}\nNozzle Diameter = {1}", GetActiveValue("first_layer_extrusion_width"), NozzleDiameter);
+                    string location = "Location: 'Advanced Controls' -> 'Slice Settings' -> 'Print' -> 'Advanced' -> 'Frist Layer'";
                     StyledMessageBox.ShowMessageBox(string.Format("{0}\n\n{1}\n\n{2}", error, details, location), "Slice Error");
                     return false;
                 }

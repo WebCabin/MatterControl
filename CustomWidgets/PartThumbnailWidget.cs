@@ -29,24 +29,19 @@ either expressed or implied, of the FreeBSD Project.
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Globalization;
-using System.Threading;
-using System.IO;
 using System.ComponentModel;
-
-using MatterHackers.Agg.Image;
-using MatterHackers.Agg.VertexSource;
+using System.IO;
 using MatterHackers.Agg;
+using MatterHackers.Agg.Image;
+using MatterHackers.Agg.PlatformAbstract;
 using MatterHackers.Agg.UI;
-using MatterHackers.VectorMath;
-using MatterHackers.MatterControl.PartPreviewWindow;
+using MatterHackers.Agg.VertexSource;
 using MatterHackers.MatterControl.DataStorage;
-
+using MatterHackers.MatterControl.PartPreviewWindow;
+using MatterHackers.MatterControl.PrintQueue;
 using MatterHackers.PolygonMesh;
 using MatterHackers.PolygonMesh.Processors;
-using MatterHackers.MatterControl.PrintQueue;
+using MatterHackers.VectorMath;
 
 namespace MatterHackers.MatterControl
 {
@@ -55,6 +50,8 @@ namespace MatterHackers.MatterControl
         static BackgroundWorker createThumbnailWorker = null;
 
         PrintItemWrapper printItem;
+		PartPreviewMainWindow partPreviewWindow;
+
         public PrintItemWrapper PrintItem
         {
             get { return printItem; }
@@ -131,7 +128,7 @@ namespace MatterHackers.MatterControl
             this.tumbnailImage = new ImageBuffer(buildingThumbnailImage);
 
             // Add Handlers
-            this.Click += new ButtonEventHandler(onMouseClick);
+            this.Click += new ButtonEventHandler(OnMouseClick);
             this.MouseEnterBounds += new EventHandler(onEnter);
             this.MouseLeaveBounds += new EventHandler(onExit);
             ActiveTheme.Instance.ThemeChanged.RegisterEvent(onThemeChanged, ref unregisterEvents);
@@ -165,6 +162,38 @@ namespace MatterHackers.MatterControl
                 {
                     thumbnailWidget.tumbnailImage = new ImageBuffer(thumbnailWidget.noThumbnailImage);
                     thumbnailWidget.Invalidate();
+                    return;
+                }
+
+                if (thumbnailWidget.PrintItem.FileLocation == QueueData.SdCardFileName)
+                {
+                    switch (thumbnailWidget.Size)
+                    {
+                        case ImageSizes.Size115x115:
+                            {
+                                ImageIO.LoadImageData(this.GetImageLocation("icon_sd_card_115x115.png"), thumbnailWidget.tumbnailImage);
+                                thumbnailWidget.tumbnailImage.SetRecieveBlender(new BlenderPreMultBGRA());
+                                Graphics2D graphics = thumbnailWidget.tumbnailImage.NewGraphics2D();
+                                Ellipse outline = new Ellipse(new Vector2(115 / 2.0, 115 / 2.0), 50);
+                                graphics.Render(new Stroke(outline, 4), RGBA_Bytes.White);
+                            }
+                            break;
+
+                        case ImageSizes.Size50x50:
+                            {
+                                ImageIO.LoadImageData(this.GetImageLocation("icon_sd_card_50x50.png"), thumbnailWidget.tumbnailImage);
+                                thumbnailWidget.tumbnailImage.SetRecieveBlender(new BlenderPreMultBGRA());
+                                Graphics2D graphics = thumbnailWidget.tumbnailImage.NewGraphics2D();
+                                Ellipse outline = new Ellipse(new Vector2(50 / 2.0, 50 / 2.0), 22);
+                                graphics.Render(new Stroke(outline, 1.5), RGBA_Bytes.White);
+                            }
+                            break;
+
+                        default:
+                            throw new NotImplementedException();
+                    }
+
+                    UiThread.RunOnIdle(thumbnailWidget.EnsureImageUpdated);
                     return;
                 }
                 
@@ -310,14 +339,27 @@ namespace MatterHackers.MatterControl
             this.Invalidate();
         }
 
-        private void onMouseClick(object sender, MouseEventArgs e)
+        private void OnMouseClick(object sender, MouseEventArgs e)
+        {
+            UiThread.RunOnIdle(DoOnMouseClick);
+        }
+
+        private void DoOnMouseClick(object state)
         {
             if (printItem != null)
             {
                 string pathAndFile = printItem.FileLocation;
-                if (File.Exists(pathAndFile))
+				if (File.Exists(pathAndFile))
                 {
-                    new PartPreviewMainWindow(printItem);
+                    bool shiftKeyDown = Keyboard.IsKeyDown(Keys.ShiftKey);
+                    if (shiftKeyDown)
+                    {
+                        OpenPartPreviewWindow (View3DTransformPart.AutoRotate.Disabled);
+                    }
+                    else
+                    {
+                        OpenPartPreviewWindow (View3DTransformPart.AutoRotate.Enabled);
+                    }
                 }
                 else
                 {
@@ -325,6 +367,25 @@ namespace MatterHackers.MatterControl
                 }
             }
         }
+
+		void PartPreviewWindow_Closed(object sender, EventArgs e)
+		{
+            this.partPreviewWindow = null;
+		}
+
+		private void OpenPartPreviewWindow(View3DTransformPart.AutoRotate autoRotate)
+		{
+            if (partPreviewWindow == null)
+			{
+                partPreviewWindow = new PartPreviewMainWindow(this.PrintItem, autoRotate);
+				partPreviewWindow.Closed += new EventHandler (PartPreviewWindow_Closed);
+			}
+			else
+			{
+                partPreviewWindow.BringToFront ();
+			}
+
+		}
 
         private void onEnter(object sender, EventArgs e)
         {
@@ -369,7 +430,7 @@ namespace MatterHackers.MatterControl
 
         string GetImageLocation(string imageName)
         {
-            return Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath, imageName);
+            return Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath, "Icons", imageName);
         }
     }
 }

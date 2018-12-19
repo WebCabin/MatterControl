@@ -30,16 +30,16 @@ either expressed or implied, of the FreeBSD Project.
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
-using System.IO.Ports;
-
 using MatterHackers.Agg;
-using MatterHackers.Agg.UI;
-using MatterHackers.VectorMath;
 using MatterHackers.Agg.Image;
-using MatterHackers.MatterControl.DataStorage;
-using MatterHackers.MatterControl.CustomWidgets;
+using MatterHackers.Agg.PlatformAbstract;
+using MatterHackers.Agg.UI;
 using MatterHackers.Localizations;
+using MatterHackers.MatterControl.CustomWidgets;
+using MatterHackers.MatterControl.DataStorage;
+using MatterHackers.MatterControl.PrinterCommunication;
+using MatterHackers.MatterControl.SlicerConfiguration;
+using MatterHackers.VectorMath;
 
 namespace MatterHackers.MatterControl
 {
@@ -57,7 +57,7 @@ namespace MatterHackers.MatterControl
     public class ManualPrinterControls : GuiWidget
     {
         readonly double minExtrutionRatio = .5;
-        readonly double maxExtrusionRatio = 2;
+        readonly double maxExtrusionRatio = 3;
         readonly double minFeedRateRatio = .5;
         readonly double maxFeedRateRatio = 2;
         readonly int TallButtonHeight = 25;
@@ -76,7 +76,6 @@ namespace MatterHackers.MatterControl
         DisableableWidget eePromControlsContainer;
         DisableableWidget tuningAdjustmentControlsContainer;
         DisableableWidget terminalCommunicationsContainer;
-        DisableableWidget sdCardManagerContainer;
         DisableableWidget macroControls;
 
         TextImageButtonFactory textImageButtonFactory = new TextImageButtonFactory();
@@ -111,7 +110,7 @@ namespace MatterHackers.MatterControl
         static string GetMovementSpeedsString()
         {
             string presets = "x,3000,y,3000,z,315,e0,150"; // stored x,value,y,value,z,value,e1,value,e2,value,e3,value,...
-            if (PrinterCommunication.Instance != null && ActivePrinterProfile.Instance.ActivePrinter != null)
+            if (PrinterConnectionAndCommunication.Instance != null && ActivePrinterProfile.Instance.ActivePrinter != null)
             {
                 string savedSettings = ActivePrinterProfile.Instance.ActivePrinter.ManualMovementSpeeds;
                 if (savedSettings != null && savedSettings != "")
@@ -169,13 +168,6 @@ namespace MatterHackers.MatterControl
 
             controlsTopToBottomLayout.AddChild(centerControlsContainer);
 
-            sdCardManagerContainer = new DisableableWidget();
-            sdCardManagerContainer.AddChild(CreateSdCardManagerContainer());
-            if (false)// || ActivePrinterProfile.Instance.ActivePrinter == null || ActivePrinterProfile.Instance.ActivePrinter.GetFeatures().HasSdCard())
-            {
-                controlsTopToBottomLayout.AddChild(sdCardManagerContainer);
-            }
-
             macroControls = new DisableableWidget();
             macroControls.AddChild(new MacroControls());
             controlsTopToBottomLayout.AddChild(macroControls);
@@ -226,8 +218,7 @@ namespace MatterHackers.MatterControl
             fanControlsContainer.HAnchor = Agg.UI.HAnchor.ParentLeftRight;
             fanControlsContainer.AddChild(fanControlsGroupBox);
 
-            if (ActivePrinterProfile.Instance.ActivePrinter == null
-                || ActivePrinterProfile.Instance.ActivePrinter.GetFeatures().HasFan())
+            if (ActiveSliceSettings.Instance.HasFan())
             {
                 controlsTopToBottomLayout.AddChild(fanControlsContainer);
             }
@@ -252,7 +243,7 @@ namespace MatterHackers.MatterControl
 				eePromControlsLayout.Padding = new BorderDouble(0);
                 {
 					Agg.Image.ImageBuffer eePromImage = new Agg.Image.ImageBuffer();
-					ImageIO.LoadImageData(Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath,"Icons", "PrintStatusControls", "leveling-24x24.png"), eePromImage);
+					ImageIO.LoadImageData(Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath, "Icons", "PrintStatusControls", "leveling-24x24.png"), eePromImage);
 					ImageWidget eePromIcon = new ImageWidget(eePromImage);
 					eePromIcon.Margin = new BorderDouble (right: 6);
 
@@ -262,13 +253,13 @@ namespace MatterHackers.MatterControl
 #if false // This is to force the creation of the repetier window for testing when we don't have repetier firmware.
                         new MatterHackers.MatterControl.EeProm.EePromRepetierWidget();
 #else
-						switch(PrinterCommunication.Instance.FirmwareType)
+						switch(PrinterConnectionAndCommunication.Instance.FirmwareType)
                         {
-                            case PrinterCommunication.FirmwareTypes.Repetier:
+                            case PrinterConnectionAndCommunication.FirmwareTypes.Repetier:
                                 new MatterHackers.MatterControl.EeProm.EePromRepetierWidget();
                             break;
 
-                            case PrinterCommunication.FirmwareTypes.Marlin:
+                            case PrinterConnectionAndCommunication.FirmwareTypes.Marlin:
                                 new MatterHackers.MatterControl.EeProm.EePromMarlinWidget();
                             break;
 
@@ -353,8 +344,7 @@ namespace MatterHackers.MatterControl
             bedTemperatureControlWidget = new DisableableWidget();
             bedTemperatureControlWidget.AddChild(new BedTemperatureControlWidget());
 
-            if (ActivePrinterProfile.Instance.ActivePrinter == null
-                || ActivePrinterProfile.Instance.ActivePrinter.GetFeatures().HasHeatedBed())
+            if (ActiveSliceSettings.Instance.HasHeatedBed())
             {
                 temperatureControlContainer.AddChild(bedTemperatureControlWidget);
             }
@@ -365,7 +355,7 @@ namespace MatterHackers.MatterControl
         EditableNumberDisplay fanSpeedDisplay;
         private GuiWidget CreateFanControls()
         {
-            PrinterCommunication.Instance.FanSpeedSet.RegisterEvent(FanSpeedChanged_Event, ref unregisterEvents);
+            PrinterConnectionAndCommunication.Instance.FanSpeedSet.RegisterEvent(FanSpeedChanged_Event, ref unregisterEvents);
 
             FlowLayoutWidget leftToRight = new FlowLayoutWidget();
             leftToRight.Padding = new BorderDouble(3, 0, 0, 5);
@@ -374,10 +364,10 @@ namespace MatterHackers.MatterControl
             fanSpeedDescription.VAnchor = Agg.UI.VAnchor.ParentCenter;
             leftToRight.AddChild(fanSpeedDescription);
 
-            fanSpeedDisplay = new EditableNumberDisplay(textImageButtonFactory, PrinterCommunication.Instance.FanSpeed0To255.ToString(), "100");
+            fanSpeedDisplay = new EditableNumberDisplay(textImageButtonFactory, PrinterConnectionAndCommunication.Instance.FanSpeed0To255.ToString(), "100");
             fanSpeedDisplay.EditComplete += (sender, e) =>
             {
-                PrinterCommunication.Instance.FanSpeed0To255 = (int)(fanSpeedDisplay.GetValue() * 255.5 / 100);
+                PrinterConnectionAndCommunication.Instance.FanSpeed0To255 = (int)(fanSpeedDisplay.GetValue() * 255.5 / 100);
             };
 
             leftToRight.AddChild(fanSpeedDisplay);
@@ -391,7 +381,7 @@ namespace MatterHackers.MatterControl
 
         void FanSpeedChanged_Event(object sender, EventArgs e)
         {
-            int printerFanSpeed = PrinterCommunication.Instance.FanSpeed0To255;
+            int printerFanSpeed = PrinterConnectionAndCommunication.Instance.FanSpeed0To255;
 
             fanSpeedDisplay.SetDisplayString(((int)(printerFanSpeed * 100.5 / 255)).ToString());
         }
@@ -428,8 +418,9 @@ namespace MatterHackers.MatterControl
                 {
                     FlowLayoutWidget feedRateLeftToRight;
                     {
-                        feedRateValue = new NumberEdit(1, allowDecimals: true, minValue: minFeedRateRatio, maxValue: maxFeedRateRatio, pixelWidth: 40);
-
+						feedRateValue = new NumberEdit(0, allowDecimals: true, minValue: minFeedRateRatio, maxValue: maxFeedRateRatio, pixelWidth: 40);
+						feedRateValue.Value = ((int)(PrinterConnectionAndCommunication.Instance.FeedRateRatio * 100 + .5)) / 100.0;
+					
                         feedRateLeftToRight = new FlowLayoutWidget();
 
 						feedRateDescription = new TextWidget(LocalizedString.Get("Speed Multiplier"));
@@ -438,16 +429,16 @@ namespace MatterHackers.MatterControl
                         feedRateLeftToRight.AddChild(feedRateDescription);
                         feedRateRatioSlider = new Slider(new Vector2(), 300, minFeedRateRatio, maxFeedRateRatio);
                         feedRateRatioSlider.Margin = new BorderDouble(5, 0);
-                        feedRateRatioSlider.Value = PrinterCommunication.Instance.FeedRateRatio;
+						feedRateRatioSlider.Value = PrinterConnectionAndCommunication.Instance.FeedRateRatio;
                         feedRateRatioSlider.View.BackgroundColor = new RGBA_Bytes();
                         feedRateRatioSlider.ValueChanged += (sender, e) =>
                         {
-                            PrinterCommunication.Instance.FeedRateRatio = feedRateRatioSlider.Value;
+							PrinterConnectionAndCommunication.Instance.FeedRateRatio = feedRateRatioSlider.Value;
                         };
-                        PrinterCommunication.Instance.FeedRateRatioChanged.RegisterEvent(FeedRateRatioChanged_Event, ref unregisterEvents);
+                        PrinterConnectionAndCommunication.Instance.FeedRateRatioChanged.RegisterEvent(FeedRateRatioChanged_Event, ref unregisterEvents);
                         feedRateValue.EditComplete += (sender, e) =>
                         {
-                            feedRateRatioSlider.Value = feedRateValue.Value;
+							feedRateRatioSlider.Value = feedRateValue.Value;
                         };
                         feedRateLeftToRight.AddChild(feedRateRatioSlider);
                         tuningRatiosLayout.AddChild(feedRateLeftToRight);
@@ -465,7 +456,8 @@ namespace MatterHackers.MatterControl
 
                     TextWidget extrusionDescription;
                     {
-                        extrusionValue = new NumberEdit(1, allowDecimals: true, minValue: minExtrutionRatio, maxValue: maxExtrusionRatio, pixelWidth: 40);
+						extrusionValue = new NumberEdit(0, allowDecimals: true, minValue: minExtrutionRatio, maxValue: maxExtrusionRatio, pixelWidth: 40);
+						extrusionValue.Value = ((int)(PrinterConnectionAndCommunication.Instance.ExtrusionRatio * 100 + .5)) / 100.0;
 
                         FlowLayoutWidget leftToRight = new FlowLayoutWidget();
                         leftToRight.Margin = new BorderDouble(top: 10);
@@ -476,13 +468,13 @@ namespace MatterHackers.MatterControl
                         leftToRight.AddChild(extrusionDescription);
                         extrusionRatioSlider = new Slider(new Vector2(), 300, minExtrutionRatio, maxExtrusionRatio);
                         extrusionRatioSlider.Margin = new BorderDouble(5, 0);
-                        extrusionRatioSlider.Value = PrinterCommunication.Instance.ExtrusionRatio;
+                        extrusionRatioSlider.Value = PrinterConnectionAndCommunication.Instance.ExtrusionRatio;
                         extrusionRatioSlider.View.BackgroundColor = new RGBA_Bytes();
                         extrusionRatioSlider.ValueChanged += (sender, e) =>
                         {
-                            PrinterCommunication.Instance.ExtrusionRatio = extrusionRatioSlider.Value;
+							PrinterConnectionAndCommunication.Instance.ExtrusionRatio = extrusionRatioSlider.Value;
                         };
-                        PrinterCommunication.Instance.ExtrusionRatioChanged.RegisterEvent(ExtrusionRatioChanged_Event, ref unregisterEvents);
+                        PrinterConnectionAndCommunication.Instance.ExtrusionRatioChanged.RegisterEvent(ExtrusionRatioChanged_Event, ref unregisterEvents);
                         extrusionValue.EditComplete += (sender, e) =>
                         {
                             extrusionRatioSlider.Value = extrusionValue.Value;
@@ -514,8 +506,8 @@ namespace MatterHackers.MatterControl
 
         void ExtrusionRatioChanged_Event(object sender, EventArgs e)
         {
-            extrusionRatioSlider.Value = PrinterCommunication.Instance.ExtrusionRatio;
-            extrusionValue.Value = ((int)(PrinterCommunication.Instance.ExtrusionRatio * 100 + .5)) / 100.0;
+            extrusionRatioSlider.Value = PrinterConnectionAndCommunication.Instance.ExtrusionRatio;
+            extrusionValue.Value = ((int)(PrinterConnectionAndCommunication.Instance.ExtrusionRatio * 100 + .5)) / 100.0;
         }
 
         public override void OnClosed(EventArgs e)
@@ -530,43 +522,9 @@ namespace MatterHackers.MatterControl
 
         void FeedRateRatioChanged_Event(object sender, EventArgs e)
         {
-            feedRateRatioSlider.Value = PrinterCommunication.Instance.FeedRateRatio;
-            feedRateValue.Value = ((int)(PrinterCommunication.Instance.FeedRateRatio * 100 + .5)) / 100.0;
+            feedRateRatioSlider.Value = PrinterConnectionAndCommunication.Instance.FeedRateRatio;
+			feedRateValue.Value = ((int)(PrinterConnectionAndCommunication.Instance.FeedRateRatio * 100 + .5)) / 100.0;
         }       
-
-        private GuiWidget CreateSdCardManagerContainer()
-        {
-            GroupBox sdCardControlsContainer;
-            sdCardControlsContainer = new GroupBox("SD Card Printing");
-
-            sdCardControlsContainer.Margin = new BorderDouble(top: 10);
-            sdCardControlsContainer.TextColor = ActiveTheme.Instance.PrimaryTextColor;
-            sdCardControlsContainer.BorderColor = ActiveTheme.Instance.PrimaryTextColor;
-            sdCardControlsContainer.HAnchor = Agg.UI.HAnchor.ParentLeftRight;
-            sdCardControlsContainer.Height = 68;
-
-            {
-                FlowLayoutWidget buttonBar = new FlowLayoutWidget();
-                buttonBar.HAnchor |= HAnchor.ParentLeftRight;
-                buttonBar.VAnchor |= Agg.UI.VAnchor.ParentCenter;
-                buttonBar.Margin = new BorderDouble(3, 0, 3, 6);
-                buttonBar.Padding = new BorderDouble(0);
-
-                this.textImageButtonFactory.FixedHeight = TallButtonHeight;
-
-                Button showSDPrintingPanel = textImageButtonFactory.Generate("SD Card Manager".ToUpper());
-                showSDPrintingPanel.Margin = new BorderDouble(left: 10);
-                showSDPrintingPanel.Click += (sender, e) =>
-                {
-                    SDCardManager.Show();
-                };
-                buttonBar.AddChild(showSDPrintingPanel);
-
-                sdCardControlsContainer.AddChild(buttonBar);
-            }
-
-            return sdCardControlsContainer;
-        }
 
         private void SetDisplayAttributes()
         {
@@ -595,52 +553,67 @@ namespace MatterHackers.MatterControl
                 fanControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Disabled);
                 tuningAdjustmentControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Disabled);
 				
-                sdCardManagerContainer.SetEnableLevel(DisableableWidget.EnableLevel.Disabled);
                 macroControls.SetEnableLevel(DisableableWidget.EnableLevel.Disabled);
             }
             else // we at least have a printer selected
             {
-                switch (PrinterCommunication.Instance.CommunicationState)
+                switch (PrinterConnectionAndCommunication.Instance.CommunicationState)
                 {
-                    case PrinterCommunication.CommunicationStates.Disconnecting:
-                    case PrinterCommunication.CommunicationStates.ConnectionLost:
-                    case PrinterCommunication.CommunicationStates.Disconnected:
-                    case PrinterCommunication.CommunicationStates.AttemptingToConnect:
-                    case PrinterCommunication.CommunicationStates.FailedToConnect:
+                    case PrinterConnectionAndCommunication.CommunicationStates.Disconnecting:
+                    case PrinterConnectionAndCommunication.CommunicationStates.ConnectionLost:
+                    case PrinterConnectionAndCommunication.CommunicationStates.Disconnected:
+                    case PrinterConnectionAndCommunication.CommunicationStates.AttemptingToConnect:
+                    case PrinterConnectionAndCommunication.CommunicationStates.FailedToConnect:
                         extruderTemperatureControlWidget.SetEnableLevel(DisableableWidget.EnableLevel.ConfigOnly);
                         bedTemperatureControlWidget.SetEnableLevel(DisableableWidget.EnableLevel.ConfigOnly);
                         movementControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.ConfigOnly);
                         fanControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Disabled);
                         tuningAdjustmentControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Disabled);                        
-                        sdCardManagerContainer.SetEnableLevel(DisableableWidget.EnableLevel.Disabled);
                         macroControls.SetEnableLevel(DisableableWidget.EnableLevel.ConfigOnly);
                         break;
 
-                    case PrinterCommunication.CommunicationStates.FinishedPrint:
-                    case PrinterCommunication.CommunicationStates.Connected:
+                    case PrinterConnectionAndCommunication.CommunicationStates.FinishedPrint:
+                    case PrinterConnectionAndCommunication.CommunicationStates.Connected:
                         extruderTemperatureControlWidget.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                         bedTemperatureControlWidget.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                         movementControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                         fanControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);                        
-                        sdCardManagerContainer.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                         macroControls.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                         tuningAdjustmentControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Disabled);
                         break;
 
-                    case PrinterCommunication.CommunicationStates.PreparingToPrint:
-                    case PrinterCommunication.CommunicationStates.Printing:
-                        switch (PrinterCommunication.Instance.PrintingState)
+                    case PrinterConnectionAndCommunication.CommunicationStates.PrintingToSd:
+                        extruderTemperatureControlWidget.SetEnableLevel(DisableableWidget.EnableLevel.Disabled);
+                        bedTemperatureControlWidget.SetEnableLevel(DisableableWidget.EnableLevel.Disabled);
+                        movementControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.ConfigOnly);
+                        fanControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Disabled);
+                        macroControls.SetEnableLevel(DisableableWidget.EnableLevel.ConfigOnly);
+                        tuningAdjustmentControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Disabled);
+                        break;
+
+                    case PrinterConnectionAndCommunication.CommunicationStates.PrintingFromSd:
+                        extruderTemperatureControlWidget.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
+                        bedTemperatureControlWidget.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
+                        movementControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.ConfigOnly);
+                        fanControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
+                        macroControls.SetEnableLevel(DisableableWidget.EnableLevel.ConfigOnly);
+                        tuningAdjustmentControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Disabled);
+                        break;
+
+                    case PrinterConnectionAndCommunication.CommunicationStates.PreparingToPrint:
+                    case PrinterConnectionAndCommunication.CommunicationStates.PreparingToPrintToSd:
+                    case PrinterConnectionAndCommunication.CommunicationStates.Printing:
+                        switch (PrinterConnectionAndCommunication.Instance.PrintingState)
                         {
-                            case PrinterCommunication.DetailedPrintingState.HomingAxis:
-                            case PrinterCommunication.DetailedPrintingState.HeatingBed:
-                            case PrinterCommunication.DetailedPrintingState.HeatingExtruder:
-                            case PrinterCommunication.DetailedPrintingState.Printing:
+                            case PrinterConnectionAndCommunication.DetailedPrintingState.HomingAxis:
+                            case PrinterConnectionAndCommunication.DetailedPrintingState.HeatingBed:
+                            case PrinterConnectionAndCommunication.DetailedPrintingState.HeatingExtruder:
+                            case PrinterConnectionAndCommunication.DetailedPrintingState.Printing:
                                 extruderTemperatureControlWidget.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                                 bedTemperatureControlWidget.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                                 movementControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.ConfigOnly);
                                 fanControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                                 tuningAdjustmentControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);                                
-                                sdCardManagerContainer.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                                 macroControls.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                                 break;
 
@@ -649,13 +622,12 @@ namespace MatterHackers.MatterControl
                         }
                         break;
 
-                    case PrinterCommunication.CommunicationStates.Paused:
+                    case PrinterConnectionAndCommunication.CommunicationStates.Paused:
                         extruderTemperatureControlWidget.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                         bedTemperatureControlWidget.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                         movementControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                         fanControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                         tuningAdjustmentControlsContainer.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);                        
-                        sdCardManagerContainer.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                         macroControls.SetEnableLevel(DisableableWidget.EnableLevel.Enabled);
                         break;
 
@@ -673,7 +645,7 @@ namespace MatterHackers.MatterControl
             homeButtonBar.Padding = new BorderDouble(0);
 
             string homeIconFile = "icon_home_white_24x24.png";
-            string fileAndPath = Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath, homeIconFile);
+            string fileAndPath = Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath, "Icons", homeIconFile);
             ImageBuffer helpIconImage = new ImageBuffer();
             ImageIO.LoadImageData(fileAndPath, helpIconImage);
             ImageWidget homeIconImageWidget = new ImageWidget(helpIconImage);
@@ -781,8 +753,8 @@ namespace MatterHackers.MatterControl
         private void AddHandlers()
         {
             ActiveTheme.Instance.ThemeChanged.RegisterEvent(onThemeChanged, ref unregisterEvents);
-            PrinterCommunication.Instance.ConnectionStateChanged.RegisterEvent(onPrinterStatusChanged, ref unregisterEvents);
-            PrinterCommunication.Instance.EnableChanged.RegisterEvent(onPrinterStatusChanged, ref unregisterEvents);
+            PrinterConnectionAndCommunication.Instance.CommunicationStateChanged.RegisterEvent(onPrinterStatusChanged, ref unregisterEvents);
+            PrinterConnectionAndCommunication.Instance.EnableChanged.RegisterEvent(onPrinterStatusChanged, ref unregisterEvents);
         }
 
         private void onPrinterStatusChanged(object sender, EventArgs e)
@@ -800,27 +772,27 @@ namespace MatterHackers.MatterControl
 
         void disableMotors_Click(object sender, MouseEventArgs mouseEvent)
         {
-            PrinterCommunication.Instance.ReleaseMotors();
+            PrinterConnectionAndCommunication.Instance.ReleaseMotors();
         }
 
         void homeXButton_Click(object sender, MouseEventArgs mouseEvent)
         {
-            PrinterCommunication.Instance.HomeAxis(PrinterCommunication.Axis.X);
+            PrinterConnectionAndCommunication.Instance.HomeAxis(PrinterConnectionAndCommunication.Axis.X);
         }
 
         void homeYButton_Click(object sender, MouseEventArgs mouseEvent)
         {
-            PrinterCommunication.Instance.HomeAxis(PrinterCommunication.Axis.Y);
+            PrinterConnectionAndCommunication.Instance.HomeAxis(PrinterConnectionAndCommunication.Axis.Y);
         }
 
         void homeZButton_Click(object sender, MouseEventArgs mouseEvent)
         {
-            PrinterCommunication.Instance.HomeAxis(PrinterCommunication.Axis.Z);
+            PrinterConnectionAndCommunication.Instance.HomeAxis(PrinterConnectionAndCommunication.Axis.Z);
         }
 
         void homeAll_Click(object sender, MouseEventArgs mouseEvent)
         {
-            PrinterCommunication.Instance.HomeAxis(PrinterCommunication.Axis.XYZ);
+            PrinterConnectionAndCommunication.Instance.HomeAxis(PrinterConnectionAndCommunication.Axis.XYZ);
         }
 
         public override void OnClosing(out bool CancelClose)

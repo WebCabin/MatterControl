@@ -35,8 +35,12 @@ using System.Globalization;
 using System.IO;
 using System.Threading;
 using MatterHackers.Agg;
+using MatterHackers.Agg.Image;
+using MatterHackers.Agg.PlatformAbstract;
 using MatterHackers.Agg.UI;
 using MatterHackers.Localizations; //Added Namespace
+using MatterHackers.MatterControl.DataStorage;
+using MatterHackers.MatterControl.PrinterCommunication;
 using MatterHackers.MatterControl.PrintQueue;
 using MatterHackers.MeshVisualizer;
 using MatterHackers.PolygonMesh;
@@ -45,9 +49,6 @@ using MatterHackers.RayTracer;
 using MatterHackers.RayTracer.Traceable;
 using MatterHackers.RenderOpenGl;
 using MatterHackers.VectorMath;
-using MatterHackers.Agg.Image;
-using MatterHackers.MatterControl.DataStorage;
-using MatterHackers.Agg.ImageProcessing;
 
 namespace MatterHackers.MatterControl.PartPreviewWindow
 {
@@ -61,6 +62,8 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
 
     public class View3DTransformPart : PartPreview3DWidget
     {
+        public WindowType windowType { get; set; }
+
         FlowLayoutWidget viewOptionContainer;
         FlowLayoutWidget rotateOptionContainer;
         FlowLayoutWidget scaleOptionContainer;
@@ -246,8 +249,13 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
             base.OnClosed(e);
         }
 
-        public View3DTransformPart(PrintItemWrapper printItemWrapper, Vector3 viewerVolume, MeshViewerWidget.BedShape bedShape, bool standAloneWindow)
+        public enum WindowType { Embeded, StandAlone };
+        public enum AutoRotate { Enabled, Disabled };
+
+        public View3DTransformPart(PrintItemWrapper printItemWrapper, Vector3 viewerVolume, MeshViewerWidget.BedShape bedShape, WindowType windowType, AutoRotate autoRotate)
         {
+            this.windowType = windowType;
+            autoRotateEnabled = (autoRotate == AutoRotate.Enabled);
             MeshExtraData = new List<PlatingMeshData>();
             MeshExtraData.Add(new PlatingMeshData());
 
@@ -260,11 +268,6 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
             FlowLayoutWidget centerPartPreviewAndControls = new FlowLayoutWidget(FlowDirection.LeftToRight);
             centerPartPreviewAndControls.AnchorAll();
 
-            if (!standAloneWindow)
-            {
-                PrinterCommunication.Instance.ConnectionStateChanged.RegisterEvent(SetEditControlsBasedOnPrinterState, ref unregisterEvents);
-            }
-
             GuiWidget viewArea = new GuiWidget();
             viewArea.AnchorAll();
             {
@@ -272,7 +275,7 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
                 
                 // this is to add an image to the bed
                 string imagePathAndFile = Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath, "OEMSettings", "bedimage.png");
-                if (File.Exists(imagePathAndFile))
+                if (autoRotateEnabled && File.Exists(imagePathAndFile))
                 {
                     ImageBuffer wattermarkImage = new ImageBuffer();
                     ImageIO.LoadImageData(imagePathAndFile, wattermarkImage);
@@ -417,7 +420,7 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
             leftRightSpacer.HAnchor = HAnchor.ParentLeftRight;
             buttonBottomPanel.AddChild(leftRightSpacer);
 
-            if (standAloneWindow)
+            if (windowType == WindowType.StandAlone)
             {
                 Button closeButton = textImageButtonFactory.Generate(LocalizedString.Get("Close"));
                 buttonBottomPanel.AddChild(closeButton);
@@ -447,26 +450,37 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
 
             UiThread.RunOnIdle(AutoSpin);
 
-            if (printItemWrapper == null && !standAloneWindow)
+            if (printItemWrapper == null && windowType == WindowType.Embeded)
             {
                 enterEditButtonsContainer.Visible = false;
             }
 
+            if (windowType == WindowType.Embeded)
+            {
+                PrinterConnectionAndCommunication.Instance.CommunicationStateChanged.RegisterEvent(SetEditControlsBasedOnPrinterState, ref unregisterEvents);
+            }
             SetEditControlsBasedOnPrinterState(this, null);
         }
 
         void SetEditControlsBasedOnPrinterState(object sender, EventArgs e)
         {
-            switch (PrinterCommunication.Instance.CommunicationState)
+            if (windowType == WindowType.Embeded)
             {
-                case PrinterCommunication.CommunicationStates.Printing:
-                case PrinterCommunication.CommunicationStates.Paused:
-                    LockEditControls();
-                    break;
+                switch (PrinterConnectionAndCommunication.Instance.CommunicationState)
+                {
+                    case PrinterConnectionAndCommunication.CommunicationStates.Printing:
+                    case PrinterConnectionAndCommunication.CommunicationStates.Paused:
+                        LockEditControls();
+                        break;
 
-                default:
-                    UnlockEditControls();
-                    break;
+                    default:
+                        UnlockEditControls();
+                        break;
+                }
+            }
+            else
+            {
+                UnlockEditControls();
             }
         }
 
@@ -668,7 +682,7 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
 
         private void LoadAndAddPartsToPlate(string[] filesToLoad)
         {
-            if (Meshes.Count > 0 && filesToLoad.Length > 0)
+            if (Meshes.Count > 0 && filesToLoad != null && filesToLoad.Length > 0)
             {
 				string loadingPartLabel = LocalizedString.Get("Loading Parts");
 				string loadingPartLabelFull = "{0}:".FormatWith(loadingPartLabel);
@@ -800,10 +814,10 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
 
         void meshViewerWidget_LoadDone(object sender, EventArgs e)
         {
-            switch (PrinterCommunication.Instance.CommunicationState)
+            switch (PrinterConnectionAndCommunication.Instance.CommunicationState)
             {
-                case PrinterCommunication.CommunicationStates.Printing:
-                case PrinterCommunication.CommunicationStates.Paused:
+                case PrinterConnectionAndCommunication.CommunicationStates.Printing:
+                case PrinterConnectionAndCommunication.CommunicationStates.Paused:
                     break;
 
                 default:
@@ -1430,25 +1444,25 @@ namespace MatterHackers.MatterControl.PartPreviewWindow
 
         public override void OnDragDrop(FileDropEventArgs fileDropEventArgs)
         {
-            List<string> stlFiles = new List<string>();
+            pendingPartsToLoad.Clear();
             foreach (string droppedFileName in fileDropEventArgs.DroppedFiles)
             {
                 string extension = Path.GetExtension(droppedFileName).ToUpper();
                 if (extension == ".STL")
                 {
-                    if (enterEditButtonsContainer.Visible == true)
-                    {
-                        EnterEditAndSplitIntoMeshes();
-                        pendingPartsToLoad.Add(droppedFileName);
-                    }
-                    else
-                    {
-                        stlFiles.Add(droppedFileName);
-                    }
+                    pendingPartsToLoad.Add(droppedFileName);
                 }
             }
 
-            LoadAndAddPartsToPlate(stlFiles.ToArray());
+            bool enterEditModeBeforeAddingParts = enterEditButtonsContainer.Visible == true;
+            if (enterEditModeBeforeAddingParts)
+            {
+                EnterEditAndSplitIntoMeshes();
+            }
+            else
+            {
+                LoadAndAddPartsToPlate(pendingPartsToLoad.ToArray());
+            }
 
             base.OnDragDrop(fileDropEventArgs);
         }

@@ -5,9 +5,12 @@ using System.IO;
 using MatterHackers.Agg;
 using MatterHackers.Agg.UI;
 using MatterHackers.Localizations;
+using MatterHackers.MatterControl;
 using MatterHackers.MatterControl.DataStorage;
 using MatterHackers.MatterControl.PrintQueue;
 using MatterHackers.MatterControl.SlicerConfiguration;
+using MatterHackers.MatterControl.ConfigurationPage.PrintLeveling;
+using MatterHackers.MatterControl.PrinterCommunication;
 
 namespace MatterHackers.MatterControl.ActionBar
 {
@@ -45,7 +48,7 @@ namespace MatterHackers.MatterControl.ActionBar
         protected override void Initialize()
         {
             textImageButtonFactory.normalTextColor = RGBA_Bytes.White;
-            textImageButtonFactory.disabledTextColor = RGBA_Bytes.LightGray;
+			textImageButtonFactory.disabledTextColor = RGBA_Bytes.LightGray;
             textImageButtonFactory.hoverTextColor = RGBA_Bytes.White;
             textImageButtonFactory.pressedTextColor = RGBA_Bytes.White;
             textImageButtonFactory.AllowThemeToAdjustImage = false;
@@ -76,7 +79,7 @@ namespace MatterHackers.MatterControl.ActionBar
 			string pauseButtonMessage = LocalizedString.Get("Pause the current print");
 			pauseButton = makeButton(pauseButtonText, pauseButtonMessage);
 
-            string cancelCancelButtonText = LocalizedString.Get("Cancel Connect");
+			string cancelCancelButtonText = LocalizedString.Get("Cancel Connect");
             string cancelConnectButtonMessage = LocalizedString.Get("Stop trying to connect to the printer.");
             cancelConnectButton = makeButton(cancelCancelButtonText, cancelConnectButtonMessage);
 
@@ -132,23 +135,22 @@ namespace MatterHackers.MatterControl.ActionBar
         event EventHandler unregisterEvents;
         protected override void AddHandlers()
         {
-            PrinterCommunication.Instance.ActivePrintItemChanged.RegisterEvent(onStateChanged, ref unregisterEvents);
-            PrinterCommunication.Instance.ConnectionStateChanged.RegisterEvent(onStateChanged, ref unregisterEvents);
+            PrinterConnectionAndCommunication.Instance.ActivePrintItemChanged.RegisterEvent(onStateChanged, ref unregisterEvents);
+            PrinterConnectionAndCommunication.Instance.CommunicationStateChanged.RegisterEvent(onStateChanged, ref unregisterEvents);
             addButton.Click += new ButtonBase.ButtonEventHandler(onAddButton_Click);
             startButton.Click += new ButtonBase.ButtonEventHandler(onStartButton_Click);
             skipButton.Click += new ButtonBase.ButtonEventHandler(onSkipButton_Click);
             removeButton.Click += new ButtonBase.ButtonEventHandler(onRemoveButton_Click);
             resumeButton.Click += new ButtonBase.ButtonEventHandler(onResumeButton_Click);
-
             pauseButton.Click += new ButtonBase.ButtonEventHandler(onPauseButton_Click);
-            cancelButton.Click += (sender, e) => { UiThread.RunOnIdle(CancelButton_Click); };
+
+			cancelButton.Click += (sender, e) => { UiThread.RunOnIdle(CancelButton_Click); };
             cancelConnectButton.Click += (sender, e) => { UiThread.RunOnIdle(CancelConnectionButton_Click); };            
             reprintButton.Click += new ButtonBase.ButtonEventHandler(onReprintButton_Click);
             doneWithCurrentPartButton.Click += new ButtonBase.ButtonEventHandler(onDoneWithCurrentPartButton_Click);
-
             ActiveTheme.Instance.ThemeChanged.RegisterEvent(onThemeChanged, ref unregisterEvents);
         }
-
+			
         public override void OnClosed(EventArgs e)
         {
             if (unregisterEvents != null)
@@ -206,11 +208,11 @@ namespace MatterHackers.MatterControl.ActionBar
                         }
 
                         timeSincePrintStarted.Restart();
-                        PrinterCommunication.Instance.StartPrint(gcodeFileContents);
+                        PrinterConnectionAndCommunication.Instance.StartPrint(gcodeFileContents);
                     }
                     else
                     {
-                        PrinterCommunication.Instance.CommunicationState = PrinterCommunication.CommunicationStates.Connected;
+                        PrinterConnectionAndCommunication.Instance.CommunicationState = PrinterConnectionAndCommunication.CommunicationStates.Connected;
                     }
                 }
             }
@@ -220,20 +222,36 @@ namespace MatterHackers.MatterControl.ActionBar
         string gcodeWarningMessage = "The file you are attempting to print is a GCode file.\n\nGCode files tell your printer exactly what to do.  They are not modified by SliceSettings and my not be appropriate for your specific printer configuration.\n\nOnly print from GCode files if you know they mach your current printer and configuration.\n\nAre you sure you want to print this GCode file?".Localize();
         string removeFromQueueMessage = "Cannot find\n'{0}'.\nWould you like to remove it from the queue?".Localize();
         string itemNotFoundMessage = "Item not found".Localize();
-        void PrintActivePart()
+        public void PrintActivePart()
         {
-            if (ActiveSliceSettings.Instance.IsValid())
+            PrintLevelingData levelingData = PrintLevelingData.GetForPrinter(ActivePrinterProfile.Instance.ActivePrinter);
+            if (levelingData.needsPrintLeveling
+                && levelingData.sampledPosition0.z == 0
+                && levelingData.sampledPosition1.z == 0
+                && levelingData.sampledPosition2.z == 0)
             {
-                string pathAndFile = PrinterCommunication.Instance.ActivePrintItem.FileLocation;
+                LevelWizardBase.ShowPrintLevelWizard(LevelWizardBase.RuningState.InitialStartupCalibration);
+                return;
+            }
+
+            string pathAndFile = PrinterConnectionAndCommunication.Instance.ActivePrintItem.FileLocation;
+            if (ActiveSliceSettings.Instance.HasSdCardReader() 
+                && pathAndFile == QueueData.SdCardFileName)
+            {
+                PrinterConnectionAndCommunication.Instance.StartSdCardPrint();
+            }
+            else if (ActiveSliceSettings.Instance.IsValid())
+            {
                 if (File.Exists(pathAndFile))
                 {
                     string hideGCodeWarning = ApplicationSettings.Instance.get("HideGCodeWarning");
 
-                    if (Path.GetExtension(pathAndFile).ToUpper() == ".GCODE" && hideGCodeWarning == null )
+                    if (Path.GetExtension(pathAndFile).ToUpper() == ".GCODE" && hideGCodeWarning == null)
                     {
                         CheckBox hideGCodeWaringCheckBox = new CheckBox(doNotShowAgainMessage);
+                        hideGCodeWaringCheckBox.TextColor = ActiveTheme.Instance.PrimaryTextColor;
+                        hideGCodeWaringCheckBox.Margin = new BorderDouble(top: 6);
                         hideGCodeWaringCheckBox.HAnchor = Agg.UI.HAnchor.ParentCenter;
-                        hideGCodeWaringCheckBox.TextColor = RGBA_Bytes.White;
                         hideGCodeWaringCheckBox.Click += (sender, e) =>
                         {
                             if (hideGCodeWaringCheckBox.Checked)
@@ -252,11 +270,10 @@ namespace MatterHackers.MatterControl.ActionBar
                         }
                     }
 
-                    PrinterCommunication.Instance.CommunicationState = PrinterCommunication.CommunicationStates.PreparingToPrint;
-                    PrintItemWrapper partToPrint = PrinterCommunication.Instance.ActivePrintItem;
+                    PrinterConnectionAndCommunication.Instance.CommunicationState = PrinterConnectionAndCommunication.CommunicationStates.PreparingToPrint;
+                    PrintItemWrapper partToPrint = PrinterConnectionAndCommunication.Instance.ActivePrintItem;
                     SlicingQueue.Instance.QueuePartForSlicing(partToPrint);
                     partToPrint.SlicingDone.RegisterEvent(partToPrint_SliceDone, ref unregisterEvents);
-
                 }
                 else
                 {
@@ -271,7 +288,10 @@ namespace MatterHackers.MatterControl.ActionBar
 
         void onStartButton_Click(object sender, MouseEventArgs mouseEvent)
         {
-            PrintActivePart();
+            UiThread.RunOnIdle((state) =>
+            {
+                PrintActivePart();
+            });
         }
 
         void onSkipButton_Click(object sender, MouseEventArgs mouseEvent)
@@ -284,9 +304,9 @@ namespace MatterHackers.MatterControl.ActionBar
 
         void onResumeButton_Click(object sender, MouseEventArgs mouseEvent)
         {
-            if (PrinterCommunication.Instance.PrinterIsPaused)
+            if (PrinterConnectionAndCommunication.Instance.PrinterIsPaused)
             {
-                PrinterCommunication.Instance.Resume();
+                PrinterConnectionAndCommunication.Instance.Resume();
             }
         }
 
@@ -297,15 +317,17 @@ namespace MatterHackers.MatterControl.ActionBar
 
         void onPauseButton_Click(object sender, MouseEventArgs mouseEvent)
         {
-            PrinterCommunication.Instance.RequestPause();
+            PrinterConnectionAndCommunication.Instance.RequestPause();
         }
 
+        string cancelCurrentPrintMessage = "Cancel the current print?".Localize();
+        string cancelCurrentPrintTitle = "Cancel Print?".Localize();
         void CancelButton_Click(object state)
         {
             if (timeSincePrintStarted.IsRunning && timeSincePrintStarted.ElapsedMilliseconds > (2 * 60 * 1000))
             {
-                if (StyledMessageBox.ShowMessageBox("Cancel the current print?", "Cancel Print?", StyledMessageBox.MessageType.YES_NO))
-                {
+                if (StyledMessageBox.ShowMessageBox(cancelCurrentPrintMessage, cancelCurrentPrintTitle, StyledMessageBox.MessageType.YES_NO))
+				{	
                     CancelPrinting();
                 }
             }
@@ -322,17 +344,17 @@ namespace MatterHackers.MatterControl.ActionBar
 
         private void CancelPrinting()
         {
-            if (PrinterCommunication.Instance.CommunicationState == PrinterCommunication.CommunicationStates.PreparingToPrint)
+            if (PrinterConnectionAndCommunication.Instance.CommunicationState == PrinterConnectionAndCommunication.CommunicationStates.PreparingToPrint)
             {
                 SlicingQueue.Instance.CancelCurrentSlicing();
             }
-            PrinterCommunication.Instance.Stop();
+            PrinterConnectionAndCommunication.Instance.Stop();
             timeSincePrintStarted.Reset();
         }
 
         void onDoneWithCurrentPartButton_Click(object sender, MouseEventArgs mouseEvent)
         {
-            PrinterCommunication.Instance.ResetToReadyState();
+            PrinterConnectionAndCommunication.Instance.ResetToReadyState();
             QueueData.Instance.RemoveAt(queueDataView.SelectedIndex);
             // We don't have to change the selected index because we should be on the next one as we deleted the one 
             // we were on.
@@ -340,7 +362,10 @@ namespace MatterHackers.MatterControl.ActionBar
 
         void onReprintButton_Click(object sender, MouseEventArgs mouseEvent)
         {
-            PrintActivePart();
+            UiThread.RunOnIdle((state) =>
+            {
+                PrintActivePart();
+            });
         }
 
         private void onStateChanged(object sender, EventArgs e)
@@ -362,6 +387,7 @@ namespace MatterHackers.MatterControl.ActionBar
             {
                 button.Enabled = true;
             }
+				
         }
 
         protected void ShowActiveButtons()
@@ -391,7 +417,7 @@ namespace MatterHackers.MatterControl.ActionBar
         protected void SetButtonStates()
         {
             this.activePrintButtons.Clear();
-            if (PrinterCommunication.Instance.ActivePrintItem == null)
+            if (PrinterConnectionAndCommunication.Instance.ActivePrintItem == null)
             {
                 this.activePrintButtons.Add(addButton);
                 ShowActiveButtons();
@@ -399,56 +425,57 @@ namespace MatterHackers.MatterControl.ActionBar
             }
             else
             {
-                switch (PrinterCommunication.Instance.CommunicationState)
+                switch (PrinterConnectionAndCommunication.Instance.CommunicationState)
                 {
-                    case PrinterCommunication.CommunicationStates.AttemptingToConnect:
+                    case PrinterConnectionAndCommunication.CommunicationStates.AttemptingToConnect:
                         this.activePrintButtons.Add(cancelConnectButton);
                         EnableActiveButtons();
                         break;
 
-                    case PrinterCommunication.CommunicationStates.Connected:
+                    case PrinterConnectionAndCommunication.CommunicationStates.Connected:
                         this.activePrintButtons.Add(startButton);
 
                         //Show 'skip' button if there are more items in queue
                         if (QueueData.Instance.Count > 1)
                         {
                             this.activePrintButtons.Add(skipButton);
-                        }                        
+                        }
 
                         this.activePrintButtons.Add(removeButton);
                         EnableActiveButtons();
                         break;
 
-                    case PrinterCommunication.CommunicationStates.PreparingToPrint:
+                    case PrinterConnectionAndCommunication.CommunicationStates.PreparingToPrint:
                         this.activePrintButtons.Add(cancelButton);
                         EnableActiveButtons();
                         break;
 
-                    case PrinterCommunication.CommunicationStates.Printing:
+                    case PrinterConnectionAndCommunication.CommunicationStates.PrintingFromSd:
+                    case PrinterConnectionAndCommunication.CommunicationStates.PrintingToSd:
+                    case PrinterConnectionAndCommunication.CommunicationStates.Printing:
                         this.activePrintButtons.Add(pauseButton);
                         this.activePrintButtons.Add(cancelButton);
                         EnableActiveButtons();
                         break;
 
-                    case PrinterCommunication.CommunicationStates.Paused:
+                    case PrinterConnectionAndCommunication.CommunicationStates.Paused:
                         this.activePrintButtons.Add(resumeButton);
                         this.activePrintButtons.Add(cancelButton);
                         EnableActiveButtons();
                         break;
 
-                    case PrinterCommunication.CommunicationStates.FinishedPrint:
+                    case PrinterConnectionAndCommunication.CommunicationStates.FinishedPrint:
                         this.activePrintButtons.Add(reprintButton);
                         this.activePrintButtons.Add(doneWithCurrentPartButton);
                         EnableActiveButtons();
                         break;
 
-                    default:                        
+                    default:
                         DisableActiveButtons();
                         break;
                 }
             }
             ShowActiveButtons();
-            
         }
     }
 }

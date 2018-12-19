@@ -1,16 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.IO;
-
 using MatterHackers.Agg;
-using MatterHackers.Agg.Transform;
-using MatterHackers.Agg.Image;
-using MatterHackers.Agg.VertexSource;
+using MatterHackers.Agg.PlatformAbstract;
 using MatterHackers.Agg.UI;
-using MatterHackers.Agg.Font;
-using MatterHackers.VectorMath;
 using MatterHackers.MatterControl.DataStorage;
 
 namespace MatterHackers.MatterControl.CustomWidgets
@@ -51,7 +43,7 @@ namespace MatterHackers.MatterControl.CustomWidgets
             hoverBackgroundColor = new RGBA_Bytes(100, 100, 100);
             
             Agg.Image.ImageBuffer arrowImage = new Agg.Image.ImageBuffer();
-            ImageIO.LoadImageData(Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath, "icon_arrow_left_16x16.png"), arrowImage);
+            ImageIO.LoadImageData(Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath, "Icons", "icon_arrow_left_16x16.png"), arrowImage);
             arrowIndicator = new ImageWidget(arrowImage);
             arrowIndicator.HAnchor = Agg.UI.HAnchor.ParentCenter;
             arrowIndicator.VAnchor = Agg.UI.VAnchor.ParentCenter;

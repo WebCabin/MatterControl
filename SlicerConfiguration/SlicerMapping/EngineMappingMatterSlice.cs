@@ -136,6 +136,10 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
 
             //infillSpeed=50 # mm/s.
             new MapItem("infillSpeed", "infill_speed"),
+
+            new MapItem("bridgeSpeed", "bridge_speed"),
+
+            new MapItem("bridgeFanSpeedPercent", "bridge_fan_speed"),
             
             //infillStartingAngle=45
             new MapItem("infillStartingAngle", "fill_angle"),
@@ -187,6 +191,12 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
             //repairOutlines=NONE # Available Values: NONE, EXTENSIVE_STITCHING, KEEP_OPEN # You can or them together using '|'.
             new MapRepairOutlines("repairOutlines", "repair_outlines_extensive_stitching"),
             new NotPassedItem("", "repair_outlines_keep_open"),
+
+#if true
+            new NotPassedItem("", "has_fan"),
+            new NotPassedItem("", "has_heated_bed"),
+            new NotPassedItem("", "has_sd_card_reader"),
+#endif
 
             //repairOverlaps=NONE # Available Values: NONE, REVERSE_ORIENTATION, UNION_ALL_TOGETHER # You can or them together using '|'.
             new MapRepairOverlaps("repairOverlaps", "repair_overlaps_reverse_orientation"),

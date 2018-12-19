@@ -48,17 +48,19 @@ using MatterHackers.MatterControl.DataStorage;
 using MatterHackers.MatterControl.CustomWidgets;
 using MatterHackers.Localizations;
 using MatterHackers.MatterControl.PartPreviewWindow;
+using MatterHackers.MatterControl.PrinterCommunication;
 
 namespace MatterHackers.MatterControl
 {
     public class WidescreenPanel : FlowLayoutWidget
     {
-        SliceSettingsWidget sliceSettingsWidget;
-        TabControl advancedControls;
+        static bool leftBorderLineHiden;
+        static bool rightBorderLineHiden;
+        static int lastNumberOfVisiblePanels;
+
         public TabPage AboutTabPage;
         TextImageButtonFactory advancedControlsButtonFactory = new TextImageButtonFactory();
         RGBA_Bytes unselectedTextColor = ActiveTheme.Instance.TabLabelUnselected;
-        SliceSettingsWidget.UiState sliceSettingsUiState = new SliceSettingsWidget.UiState();
 
         FlowLayoutWidget ColumnOne;
         FlowLayoutWidget ColumnTwo;
@@ -74,6 +76,8 @@ namespace MatterHackers.MatterControl
 
         event EventHandler unregisterEvents;
 
+        public static RootedObjectEventHandler PreChangePannels = new RootedObjectEventHandler();
+
         QueueDataView queueDataView = null;
         
         public WidescreenPanel()
@@ -85,22 +89,21 @@ namespace MatterHackers.MatterControl
             Padding = new BorderDouble(4);
 
             ActivePrinterProfile.Instance.ActivePrinterChanged.RegisterEvent(LoadSettingsOnPrinterChanged, ref unregisterEvents);
-            PrinterCommunication.Instance.ActivePrintItemChanged.RegisterEvent(onActivePrintItemChanged, ref unregisterEvents);
-            ApplicationWidget.Instance.ReloadPanelTrigger.RegisterEvent(ReloadAdvancedControlsPanel, ref unregisterEvents);
+            PrinterConnectionAndCommunication.Instance.ActivePrintItemChanged.RegisterEvent(onActivePrintItemChanged, ref unregisterEvents);
+            ApplicationWidget.Instance.ReloadAdvancedControlsPanelTrigger.RegisterEvent(ReloadAdvancedControlsPanel, ref unregisterEvents);
             this.BoundsChanged += new EventHandler(onBoundsChanges);
         }
 
         public override void OnParentChanged(EventArgs e)
         {
-            lastNumberVisible = 0;
+            lastNumberOfVisiblePanels = 0;
             RecreateAllPanels();
             base.OnParentChanged(e);
         }
 
-        static int lastNumberVisible;
         void onBoundsChanges(Object sender, EventArgs e)
         {
-            if (NumberOfVisiblePanels() != lastNumberVisible)
+            if (NumberOfVisiblePanels() != lastNumberOfVisiblePanels)
             {
                 RecreateAllPanels();
             }
@@ -135,45 +138,6 @@ namespace MatterHackers.MatterControl
             base.OnClosed(e);
         }
 
-        TabControl CreateNewAdvancedControlsTab(SliceSettingsWidget.UiState sliceSettingsUiState)
-        {
-            StoreUiState();
-
-            advancedControls = new TabControl();
-            advancedControls.AnchorAll();
-            advancedControls.BackgroundColor = ActiveTheme.Instance.PrimaryBackgroundColor;
-            advancedControls.TabBar.BorderColor = ActiveTheme.Instance.SecondaryTextColor;
-            advancedControls.TabBar.Margin = new BorderDouble(0, 0);
-            advancedControls.TabBar.Padding = new BorderDouble(0, 2);
-
-            advancedControlsButtonFactory.invertImageLocation = false;
-
-            GuiWidget manualPrinterControls = new ManualPrinterControls();
-            ScrollableWidget manualPrinterControlsScrollArea = new ScrollableWidget(true);
-            manualPrinterControlsScrollArea.ScrollArea.HAnchor |= Agg.UI.HAnchor.ParentLeftRight;
-            manualPrinterControlsScrollArea.AnchorAll();
-            manualPrinterControlsScrollArea.AddChild(manualPrinterControls);  
-
-            //Add the tab contents for 'Advanced Controls'
-            string printerControlsLabel = LocalizedString.Get("Controls").ToUpper();
-            advancedControls.AddTab(new SimpleTextTabWidget(new TabPage(manualPrinterControlsScrollArea, printerControlsLabel), 16,
-            ActiveTheme.Instance.PrimaryTextColor, new RGBA_Bytes(), unselectedTextColor, new RGBA_Bytes()));
-
-            string sliceSettingsLabel = LocalizedString.Get("Slice Settings").ToUpper();
-            sliceSettingsWidget = new SliceSettingsWidget(sliceSettingsUiState);
-            advancedControls.AddTab(new SimpleTextTabWidget(new TabPage(sliceSettingsWidget, sliceSettingsLabel), 16,
-                        ActiveTheme.Instance.PrimaryTextColor, new RGBA_Bytes(), unselectedTextColor, new RGBA_Bytes()));
-
-            string configurationLabel = LocalizedString.Get("Configuration").ToUpper();
-            ScrollableWidget configurationControls = new ConfigurationPage();
-            advancedControls.AddTab(new SimpleTextTabWidget(new TabPage(configurationControls, configurationLabel), 16,
-                        ActiveTheme.Instance.PrimaryTextColor, new RGBA_Bytes(), unselectedTextColor, new RGBA_Bytes()));
-
-            RestoreUiState();
-
-            return advancedControls;
-        }
-
         void onRightBorderClick(object sender, EventArgs e)
         {
             RightBorderLine.Hidden = !RightBorderLine.Hidden;
@@ -190,30 +154,9 @@ namespace MatterHackers.MatterControl
 
         void onActivePrintItemChanged(object sender, EventArgs e)
         {
-            UiThread.RunOnIdle(LoadColumnTwo);
-        }
-
-        public void StoreUiState()
-        {
-            if (queueDataView != null)
+            if (NumberOfVisiblePanels() > 1)
             {
-                MainScreenUiState.lastSelectedIndex = queueDataView.SelectedIndex;
-            }
-            if (advancedControls != null)
-            {
-                MainScreenUiState.lastAdvancedControlsTab = advancedControls.SelectedTabIndex;
-            }
-        }
-
-        void RestoreUiState()
-        {
-            if (MainScreenUiState.lastSelectedIndex != MainScreenUiState.EmpytValue && queueDataView != null)
-            {
-                queueDataView.SelectedIndex = MainScreenUiState.lastSelectedIndex;
-            }
-            if (MainScreenUiState.lastAdvancedControlsTab != MainScreenUiState.EmpytValue && advancedControls != null)
-            {
-                advancedControls.SelectedTabIndex = MainScreenUiState.lastAdvancedControlsTab;
+                UiThread.RunOnIdle(LoadColumnTwo);
             }
         }
 
@@ -223,7 +166,7 @@ namespace MatterHackers.MatterControl
             
             ColumnOne.RemoveAllChildren();
             ColumnOne.AddChild(new ActionBarPlus(queueDataView));
-            ColumnOne.AddChild(new CompactSlidePanel(queueDataView, sliceSettingsUiState));
+            ColumnOne.AddChild(new CompactSlidePanel(queueDataView));
             ColumnOne.AnchorAll();
         }
 
@@ -234,20 +177,20 @@ namespace MatterHackers.MatterControl
             ColumnOne.VAnchor = VAnchor.ParentBottomTop;
             ColumnOne.AddChild(new ActionBarPlus(queueDataView));
             ColumnOne.AddChild(new PrintProgressBar());
-            ColumnOne.AddChild(new MainScreenTabView(queueDataView));
+            ColumnOne.AddChild(new FirstPanelTabView(queueDataView));
             ColumnOne.Width = 500; //Ordering here matters - must go after children are added                      
         }
 
         void LoadColumnTwo(object state = null)
         {
-            ColumnTwo.RemoveAllChildren();
+            ColumnTwo.CloseAndRemoveAllChildren();
 
             double buildHeight = ActiveSliceSettings.Instance.BuildHeight;
-            part3DView = new View3DTransformPart(PrinterCommunication.Instance.ActivePrintItem, new Vector3(ActiveSliceSettings.Instance.BedSize, buildHeight), ActiveSliceSettings.Instance.BedShape, false);
+            part3DView = new View3DTransformPart(PrinterConnectionAndCommunication.Instance.ActivePrintItem, new Vector3(ActiveSliceSettings.Instance.BedSize, buildHeight), ActiveSliceSettings.Instance.BedShape, View3DTransformPart.WindowType.Embeded, View3DTransformPart.AutoRotate.Enabled);
             part3DView.Margin = new BorderDouble(bottom: 4);
             part3DView.AnchorAll();
 
-            partGcodeView = new ViewGcodeBasic(PrinterCommunication.Instance.ActivePrintItem, new Vector3(ActiveSliceSettings.Instance.BedSize, buildHeight), ActiveSliceSettings.Instance.BedShape, ActiveSliceSettings.Instance.BedCenter, false);
+            partGcodeView = new ViewGcodeBasic(PrinterConnectionAndCommunication.Instance.ActivePrintItem, new Vector3(ActiveSliceSettings.Instance.BedSize, buildHeight), ActiveSliceSettings.Instance.BedShape, ActiveSliceSettings.Instance.BedCenter, false);
             partGcodeView.AnchorAll();
 
             ColumnTwo.AddChild(part3DView);
@@ -258,7 +201,7 @@ namespace MatterHackers.MatterControl
         void LoadColumnThree(object state = null)
         {
             ColumnThree.RemoveAllChildren();
-            ColumnThree.AddChild(CreateNewAdvancedControlsTab(sliceSettingsUiState));
+            ColumnThree.AddChild(new ThirdPanelTabView());
             ColumnThree.Width = 590; //Ordering here matters - must go after children are added  
         }
 
@@ -274,20 +217,34 @@ namespace MatterHackers.MatterControl
             }
             else
             {
+                if(LeftBorderLine != null
+                    && (LeftBorderLine.Hidden || RightBorderLine.Hidden))
+                {
+                    // If we are only showing 1 or 2 pannels (but are in wide mode),
+                    // return 2 so we don't resize as often.
+                    return 2;
+                }
+
                 return 3;
             }
         }
 
-        void RecreateAllPanels(object state = null)
+        public void RecreateAllPanels(object state = null)
         {
             if (Width == 0)
             {
                 return;
             }
-            StoreUiState();
-            RemovePanelsAndCreateEmpties();
 
             int numberOfPanels = NumberOfVisiblePanels();
+
+            if (LeftBorderLine != null)
+            {
+                leftBorderLineHiden = LeftBorderLine.Hidden;
+                rightBorderLineHiden = RightBorderLine.Hidden;
+            }
+            PreChangePannels.CallEvents(this, null);
+            RemovePanelsAndCreateEmpties();
 
             switch (numberOfPanels)
             {
@@ -305,16 +262,18 @@ namespace MatterHackers.MatterControl
 
                     LoadColumnOne();
                     // make sure we restore the state of column one because LoadColumnThree is going to save it.
-                    RestoreUiState();
                     LoadColumnTwo();
                     LoadColumnThree();
                     break;
             }
 
+            LeftBorderLine.Hidden = leftBorderLineHiden;
+            RightBorderLine.Hidden = rightBorderLineHiden;
             SetColumnVisibility(state);
+            RightBorderLine.SetDisplayState();
+            LeftBorderLine.SetDisplayState();
 
-            RestoreUiState();
-            lastNumberVisible = numberOfPanels;
+            lastNumberOfVisiblePanels = numberOfPanels;
         }
 
         void SetColumnVisibility(object state = null)
@@ -398,7 +357,7 @@ namespace MatterHackers.MatterControl
 
         private void RemovePanelsAndCreateEmpties()
         {
-            RemoveAllChildren();
+            CloseAndRemoveAllChildren();
 
             ColumnOne = new FlowLayoutWidget(FlowDirection.TopToBottom);
             ColumnTwo = new FlowLayoutWidget(FlowDirection.TopToBottom);
@@ -420,8 +379,11 @@ namespace MatterHackers.MatterControl
 
         public void ReloadAdvancedControlsPanel(object sender, EventArgs widgetEvent)
         {
-            sliceSettingsUiState = new SliceSettingsWidget.UiState(sliceSettingsWidget);
-            UiThread.RunOnIdle(LoadColumnThree);
+            PreChangePannels.CallEvents(this, null);
+            if (NumberOfVisiblePanels() > 1)
+            {
+                UiThread.RunOnIdle(LoadColumnThree);
+            }
         }
 
         public void LoadSettingsOnPrinterChanged(object sender, EventArgs e)

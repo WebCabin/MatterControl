@@ -29,16 +29,14 @@ either expressed or implied, of the FreeBSD Project.
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.IO;
-using System.Text;
-
 using MatterHackers.Agg;
-using MatterHackers.Agg.UI;
-using MatterHackers.VectorMath;
 using MatterHackers.Agg.Image;
-using MatterHackers.MatterControl.DataStorage;
+using MatterHackers.Agg.PlatformAbstract;
+using MatterHackers.Agg.UI;
 using MatterHackers.Localizations;
+using MatterHackers.MatterControl.DataStorage;
+using MatterHackers.VectorMath;
 
 namespace MatterHackers.MatterControl.CreatorPlugins
 {
@@ -50,7 +48,7 @@ namespace MatterHackers.MatterControl.CreatorPlugins
 
         ImageBuffer LoadImage(string imageName)
         {
-            string path = Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath, imageName);
+            string path = Path.Combine(ApplicationDataStorage.Instance.ApplicationStaticDataPath, "Icons", imageName);
             ImageBuffer buffer = new ImageBuffer(10, 10, 32, new BlenderBGRA());
             ImageIO.LoadImageData(path, buffer);
             return buffer;

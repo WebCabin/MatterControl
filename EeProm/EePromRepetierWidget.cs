@@ -37,6 +37,7 @@ using System.Text;
 using MatterHackers.Agg;
 using MatterHackers.Agg.UI;
 using MatterHackers.Localizations;
+using MatterHackers.MatterControl.PrinterCommunication;
 
 namespace MatterHackers.MatterControl.EeProm
 {
@@ -117,7 +118,7 @@ namespace MatterHackers.MatterControl.EeProm
             ShowAsSystemWindow();
 
             currentEePromSettings.Clear();
-            PrinterCommunication.Instance.CommunicationUnconditionalFromPrinter.RegisterEvent(currentEePromSettings.Add, ref unregisterEvents); 
+            PrinterConnectionAndCommunication.Instance.CommunicationUnconditionalFromPrinter.RegisterEvent(currentEePromSettings.Add, ref unregisterEvents); 
             currentEePromSettings.eventAdded += NewSettingReadFromPrinter;
             currentEePromSettings.AskPrinterForSettings();
 
@@ -159,7 +160,7 @@ namespace MatterHackers.MatterControl.EeProm
         public void translate()
         {
             Title = LocalizedString.Get("Firmware EEPROM Settings");
-            buttonCancel.Text = LocalizedString.Get("Cancel");
+            buttonCancel.Text = LocalizedString.Get("Close");
             buttonCancel.Click += buttonAbort_Click;
 
             buttonSave.Text = LocalizedString.Get("Save to EEPROM");
@@ -177,6 +178,7 @@ namespace MatterHackers.MatterControl.EeProm
             }
         }
 
+        int currentTabIndex = 0;
         void AddItemToUi(object state)
         {
             EePromRepetierParameter newSetting = state as EePromRepetierParameter;
@@ -196,6 +198,7 @@ namespace MatterHackers.MatterControl.EeProm
                 double currentValue;
                 double.TryParse(newSetting.Value, out currentValue);
                 MHNumberEdit valueEdit = new MHNumberEdit(currentValue, pixelWidth: 80, allowNegatives: true, allowDecimals: true);
+                valueEdit.TabIndex = currentTabIndex++;
                 valueEdit.VAnchor = Agg.UI.VAnchor.ParentCenter;
                 valueEdit.ActuallNumberEdit.EditComplete += (sender, e) =>
                 {

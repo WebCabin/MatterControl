@@ -29,20 +29,18 @@ either expressed or implied, of the FreeBSD Project.
 //#define RUN_MATTER_SLICE_IN_PROCESS
 
 using System;
-using System.IO;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Runtime.InteropServices;
 using System.Diagnostics;
 using System.Globalization;
-
+using System.IO;
+using System.Threading;
 using MatterHackers.Agg;
-using MatterHackers.MatterControl.DataStorage;
-using MatterHackers.MatterControl.PrintQueue;
 using MatterHackers.Agg.UI;
 using MatterHackers.Localizations;
+using MatterHackers.MatterControl.DataStorage;
+using MatterHackers.MatterControl.PrinterCommunication;
+using MatterHackers.MatterControl.PrintQueue;
+using MatterHackers.Agg.PlatformAbstract;
 
 namespace MatterHackers.MatterControl.SlicerConfiguration
 {
@@ -105,9 +103,9 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
 
         static string getSlicerFullPath()
         {
-            switch (MatterHackers.Agg.UI.WindowsFormsAbstract.GetOSType())
+            switch (OsInformation.OperatingSystem)
             {
-                case Agg.UI.WindowsFormsAbstract.OSType.Windows:
+                case OSType.Windows:
                     switch (ActivePrinterProfile.Instance.ActiveSliceEngineType)
                     {
                         case ActivePrinterProfile.SlicingEngineTypes.Slic3r:
@@ -140,7 +138,7 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
                             throw new NotImplementedException();
                     }
 
-                case Agg.UI.WindowsFormsAbstract.OSType.Mac:
+                case OSType.Mac:
                     switch (ActivePrinterProfile.Instance.ActiveSliceEngineType)
                     {
                         case ActivePrinterProfile.SlicingEngineTypes.Slic3r:
@@ -164,6 +162,30 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
                             throw new NotImplementedException();
                     }
 
+                case OSType.X11:
+					switch (ActivePrinterProfile.Instance.ActiveSliceEngineType)
+					{
+						case ActivePrinterProfile.SlicingEngineTypes.Slic3r:
+							{
+								//string parentLocation = Directory.GetParent (ApplicationDataStorage.Instance.ApplicationPath).ToString ();
+								string applicationPath = Path.Combine(ApplicationDataStorage.Instance.ApplicationPath, "Slic3r.app", "Contents", "MacOS", "slic3r");
+								return applicationPath;
+							}
+						case ActivePrinterProfile.SlicingEngineTypes.CuraEngine:
+							{
+								string applicationPath = Path.Combine(ApplicationDataStorage.Instance.ApplicationPath, "CuraEngine");
+								return applicationPath;
+							}
+						case ActivePrinterProfile.SlicingEngineTypes.MatterSlice:
+							{
+								string applicationPath = Path.Combine(ApplicationDataStorage.Instance.ApplicationPath, "MatterSlice");
+								return applicationPath;
+							}
+
+					default:
+						throw new NotImplementedException();
+					}
+					
                 default:
                     throw new NotImplementedException();
             }
@@ -176,7 +198,7 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
 
             while (!haltSlicingThread)
             {
-                if (PrinterCommunication.Instance.ActivePrintItem != null && listOfSlicingItems.Count > 0)
+                if (PrinterConnectionAndCommunication.Instance.ActivePrintItem != null && listOfSlicingItems.Count > 0)
                 {
                     PrintItemWrapper itemToSlice = listOfSlicingItems[0];
                     // check that the STL file is currently on disk
@@ -187,7 +209,7 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
                         string currentConfigurationFileAndPath = Path.Combine(ApplicationDataStorage.Instance.GCodeOutputPath, "config_" + ActiveSliceSettings.Instance.GetHashCode().ToString() + ".ini");
                         ActiveSliceSettings.Instance.GenerateConfigFile(currentConfigurationFileAndPath);
 
-                        string gcodePathAndFileName = itemToSlice.GCodePathAndFileName;
+                        string gcodePathAndFileName = itemToSlice.GetGCodePathAndFileName();
                         bool gcodeFileIsComplete = itemToSlice.IsGCodeFileComplete(gcodePathAndFileName);
 
                         if (!File.Exists(gcodePathAndFileName) || !gcodeFileIsComplete)
@@ -212,8 +234,8 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
                                     break;
                             }
 
-#if RUN_MATTER_SLICE_IN_PROCESS
-                            if (ActivePrinterProfile.Instance.ActiveSliceEngineType == ActivePrinterProfile.SlicingEngineTypes.MatterSlice)
+                            if (OsInformation.OperatingSystem == OSType.Mac
+                                && ActivePrinterProfile.Instance.ActiveSliceEngineType == ActivePrinterProfile.SlicingEngineTypes.MatterSlice)
                             {
                                 itemCurrentlySlicing = itemToSlice;
                                 MatterHackers.MatterSlice.LogOutput.GetLogWrites += SendProgressToItem;
@@ -222,7 +244,6 @@ namespace MatterHackers.MatterControl.SlicerConfiguration
                                 itemCurrentlySlicing = null;
                             }
                             else
-#endif
                             {
                                 slicerProcess = new Process();
                                 slicerProcess.StartInfo.Arguments = commandArgs;

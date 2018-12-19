@@ -32,7 +32,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.IO;
-using System.Data.Common;
 using System.Diagnostics;
 using System.ComponentModel;
 using System.Reflection;
@@ -291,80 +290,6 @@ namespace MatterHackers.MatterControl.DataStorage
         }
     }
 
-    public class PrinterFeatures
-    {
-        Dictionary<string, string> features = new Dictionary<string, string>();
-        public PrinterFeatures(string features)
-        {
-            if (features != null)
-            {
-                string[] featuresArray = features.Split(',');
-                for (int i = 0; i < features.Length / 2; i++)
-                {
-                    this.features.Add(featuresArray[i * 2], featuresArray[i * 2 + 1]);
-                }
-            }
-        }
-
-        public string GetFeatuersString()
-        {
-            StringBuilder output = new StringBuilder();
-
-            bool first = true;
-            foreach (KeyValuePair<string, string> feature in features)
-            {
-                if (!first)
-                {
-                    output.Append(",");
-                }
-                output.Append(feature.Key + "," + feature.Value);
-                first = false;
-            }
-
-            return output.ToString();
-        }
-
-        public bool HasFan()
-        {
-            if (features.ContainsKey("HasFan"))
-            {
-                return features["HasFan"] == "true";
-            }
-
-            return true;
-        }
-
-        public bool HasSdCard()
-        {
-            if (features.ContainsKey("HasSdCard"))
-            {
-                return features["HasSdCard"] == "true";
-            }
-
-            return true;
-        }
-
-        public bool HasHeatedBed()
-        {
-            if (features.ContainsKey("HasHeatedBed"))
-            {
-                return features["HasHeatedBed"] == "true";
-            }
-
-            return true;
-        }
-
-        public int ExtruderCount()
-        {
-            if (features.ContainsKey("ExtruderCount"))
-            {
-                return int.Parse(features["ExtruderCount"]);
-            }
-
-            return 1;
-        }
-    }
-
     public class Printer : Entity
     {
         public int DefaultSettingsCollectionId { get; set; }
@@ -374,7 +299,13 @@ namespace MatterHackers.MatterControl.DataStorage
         public string ComPort { get; set; }
         public string BaudRate { get; set; }
         public bool AutoConnectFlag { get; set; } //Auto connect to printer (if available)
+        public string DeviceToken { get; set; }
+        public string DeviceType { get; set; }
+        
+        // all the data about print leveling
         public bool DoPrintLeveling { get; set; }
+        public string PrintLevelingJsonData { get; set; }
+        public string PrintLevelingProbePositions { get; set; } // this is depricated go through PrintLevelingData
 
         // features
         public string _features { get; set; }
@@ -386,72 +317,6 @@ namespace MatterHackers.MatterControl.DataStorage
         public string MaterialCollectionIds { get; set; } // store id1,id2... (for N extruders)
         public int QualityCollectionId { get; set; }
 
-        /// <summary>
-        /// This stores the 3 bed probed positions as a string. 3 * (x, y, z) = 9 values.
-        /// </summary>
-        public string PrintLevelingProbePositions { get; set; }
-
-        protected PrinterFeatures printerFeatures;
-        public PrinterFeatures GetFeatures()
-        {
-            if (printerFeatures == null)
-            {
-                printerFeatures = new PrinterFeatures(_features);
-            }
-
-            return printerFeatures;
-        }
-
-        public override void Commit()
-        {
-            if (printerFeatures != null)
-            {
-                _features = printerFeatures.GetFeatuersString();
-            }
-
-            base.Commit();
-        }
-
-        /// <summary>
-        /// Gets the 9 {3 * (x, y, z)} positions that were probed during the print leveling setup.
-        /// </summary>
-        /// <returns></returns>
-        public double[] GetPrintLevelingMeasuredPositions()
-        {
-            double[] positions = new double[9];
-
-            if (PrintLevelingProbePositions != null)
-            {
-                string[] lines = PrintLevelingProbePositions.Split(',');
-                if (lines.Length == 9)
-                {
-                    for (int i = 0; i < 9; i++)
-                    {
-                        positions[i] = double.Parse(lines[i]);
-                    }
-                }
-            }
-
-            return positions;
-        }
-
-        public void SetPrintLevelingMeasuredPositions(double[] printLevelingPositions3_xyz)
-        {
-            StringBuilder allValues = new StringBuilder();
-            bool first = true;
-            foreach (double position in printLevelingPositions3_xyz)
-            {
-                if (!first)
-                {
-                    allValues.Append(",");
-                }
-                allValues.Append(position);
-                first = false;
-            }
-
-            PrintLevelingProbePositions = allValues.ToString();
-        }
-
         public Printer()
             : base()
         {
@@ -459,4 +324,19 @@ namespace MatterHackers.MatterControl.DataStorage
             this.Model = "Unknown";
         }
     }
+
+	public class PrinterSetting : Entity
+	{
+		[Indexed]
+		public int PrinterId { get; set; }
+		public string Name { get; set; }
+		public string Value { get; set; }
+		public DateTime DateLastModified { get; set; }
+
+		public override void Commit()
+		{
+			DateLastModified = DateTime.Now;
+			base.Commit();
+		}
+	}
 }

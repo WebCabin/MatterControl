@@ -28,23 +28,22 @@ either expressed or implied, of the FreeBSD Project.
 */
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.IO;
-
-using MatterHackers.Agg.Image;
 using MatterHackers.Agg;
+using MatterHackers.Agg.Image;
+using MatterHackers.Agg.PlatformAbstract;
 using MatterHackers.Agg.UI;
-using MatterHackers.VectorMath;
 using MatterHackers.MatterControl;
 using MatterHackers.MatterControl.DataStorage;
-using MatterHackers.Agg.ImageProcessing;
+using MatterHackers.MatterControl.PrinterCommunication;
+using MatterHackers.VectorMath;
 
 namespace MatterHackers.MatterControl.PrintQueue
 {
     public class QueueDataView : ScrollableWidget
     {
+        public static int selectedQueueItemIndex = -1;
+
         event EventHandler unregisterEvents;
 
         // make this private so it can only be built from the Instance
@@ -119,13 +118,13 @@ namespace MatterHackers.MatterControl.PrintQueue
             if (SelectedIndex >= 0 && SelectedIndex < Count)
             {
                 int currentIndex = SelectedIndex;
-                PrintItem replacementItem = new PrintItem(SelectedPart.Name, SelectedPart.FileLocation);
+                PrintItem replacementItem = new PrintItem(SelectedPrintItem.Name, SelectedPrintItem.FileLocation);
                 QueueData.Instance.RemoveAt(SelectedIndex);
                 this.SelectedIndex = currentIndex;
             }
         }
 
-        public PrintItemWrapper SelectedPart
+        public PrintItemWrapper SelectedPrintItem
         {
             get
             {
@@ -136,6 +135,25 @@ namespace MatterHackers.MatterControl.PrintQueue
                 else
                 {
                     return null;
+                }
+            }
+
+            set
+            {
+                if (SelectedPrintItem != value)
+                {
+                    for (int index = 0; index < topToBottomItemList.Children.Count; index++)
+                    {
+                        GuiWidget child = topToBottomItemList.Children[index];
+                        QueueRowItem rowItem = child.Children[0] as QueueRowItem;
+                        if (rowItem.PrintItemWrapper == value)
+                        {
+                            SelectedIndex = index;
+                            return;
+                        }
+                    }
+
+                    throw new Exception("Item not in queue.");
                 }
             }
         }
@@ -200,12 +218,12 @@ namespace MatterHackers.MatterControl.PrintQueue
                     if (index == selectedIndex)
                     {
                         ((QueueRowItem)child.Children[0]).isSelectedItem = true;
-                        if (!PrinterCommunication.Instance.PrinterIsPrinting && !PrinterCommunication.Instance.PrinterIsPaused)
+                        if (!PrinterConnectionAndCommunication.Instance.PrinterIsPrinting && !PrinterConnectionAndCommunication.Instance.PrinterIsPaused)
                         {
                             ((QueueRowItem)child.Children[0]).isActivePrint = true;
-                            PrinterCommunication.Instance.ActivePrintItem = ((QueueRowItem)child.Children[0]).PrintItemWrapper;
+                            PrinterConnectionAndCommunication.Instance.ActivePrintItem = ((QueueRowItem)child.Children[0]).PrintItemWrapper;
                         }
-                        else if (((QueueRowItem)child.Children[0]).PrintItemWrapper == PrinterCommunication.Instance.ActivePrintItem)
+                        else if (((QueueRowItem)child.Children[0]).PrintItemWrapper == PrinterConnectionAndCommunication.Instance.ActivePrintItem)
                         {
                             // the selection must be the active print item
                             ((QueueRowItem)child.Children[0]).isActivePrint = true;
@@ -217,7 +235,7 @@ namespace MatterHackers.MatterControl.PrintQueue
                         {
                             ((QueueRowItem)child.Children[0]).isSelectedItem = false;
                         }
-                        if (!PrinterCommunication.Instance.PrinterIsPrinting && !PrinterCommunication.Instance.PrinterIsPaused)
+                        if (!PrinterConnectionAndCommunication.Instance.PrinterIsPrinting && !PrinterConnectionAndCommunication.Instance.PrinterIsPaused)
                         {
                             if (((QueueRowItem)child.Children[0]).isActivePrint)
                             {
@@ -232,9 +250,14 @@ namespace MatterHackers.MatterControl.PrintQueue
 
                 if (QueueData.Instance.Count == 0)
                 {
-                    PrinterCommunication.Instance.ActivePrintItem = null;
+                    PrinterConnectionAndCommunication.Instance.ActivePrintItem = null;
                 }
             }
+        }
+
+        public override void SendToChildren(object objectToRout)
+        {
+            base.SendToChildren(objectToRout);
         }
 
         public int DragIndex
@@ -318,6 +341,24 @@ namespace MatterHackers.MatterControl.PrintQueue
             QueueData.Instance.ItemAdded.RegisterEvent(ItemAddedToQueue, ref unregisterEvents);
             QueueData.Instance.ItemRemoved.RegisterEvent(ItemRemovedFromToQueue, ref unregisterEvents);
             QueueData.Instance.OrderChanged.RegisterEvent(QueueOrderChanged, ref unregisterEvents);
+
+            PrinterConnectionAndCommunication.Instance.ActivePrintItemChanged.RegisterEvent(PrintItemChange, ref unregisterEvents);
+
+            WidescreenPanel.PreChangePannels.RegisterEvent(SaveCurrentlySelctedItemIndex, ref unregisterEvents);
+
+            selectedQueueItemIndex = Math.Min(selectedQueueItemIndex, QueueData.Instance.Count-1);
+            SelectedIndex = selectedQueueItemIndex;
+        }
+
+        void SaveCurrentlySelctedItemIndex(object sender, EventArgs e)
+        {
+            selectedQueueItemIndex = SelectedIndex;
+        }
+
+
+        void PrintItemChange(object sender, EventArgs e)
+        {
+            SelectedPrintItem = PrinterConnectionAndCommunication.Instance.ActivePrintItem;
         }
 
         void ItemAddedToQueue(object sender, EventArgs e)

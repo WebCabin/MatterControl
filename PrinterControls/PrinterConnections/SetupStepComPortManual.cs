@@ -8,12 +8,12 @@ using System.Diagnostics;
 
 using MatterHackers.Agg;
 using MatterHackers.Agg.UI;
-using MatterHackers.Agg.OpenGlGui;
 using MatterHackers.PolygonMesh;
 using MatterHackers.RenderOpenGl;
 using MatterHackers.VectorMath;
 using MatterHackers.MatterControl.DataStorage;
 using MatterHackers.Localizations;
+using MatterHackers.MatterControl.PrinterCommunication;
 
 namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
 {
@@ -45,7 +45,7 @@ namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
 				connectButton = textImageButtonFactory.Generate(LocalizedString.Get("Connect"));
                 connectButton.Click += new ButtonBase.ButtonEventHandler(ConnectButton_Click);
 
-                PrinterCommunication.Instance.ConnectionStateChanged.RegisterEvent(onPrinterStatusChanged, ref unregisterEvents);
+                PrinterConnectionAndCommunication.Instance.CommunicationStateChanged.RegisterEvent(onPrinterStatusChanged, ref unregisterEvents);
 
 				refreshButton = textImageButtonFactory.Generate(LocalizedString.Get("Refresh"));
                 refreshButton.Click += new ButtonBase.ButtonEventHandler(RefreshButton_Click);
@@ -191,11 +191,11 @@ namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
 
         void onPrinterStatusChanged(object sender, EventArgs e)
         {
-            if (PrinterCommunication.Instance.PrinterIsConnected)
+            if (PrinterConnectionAndCommunication.Instance.PrinterIsConnected)
             {
                 onConnectionSuccess();
             }
-            else if (PrinterCommunication.Instance.CommunicationState != PrinterCommunication.CommunicationStates.AttemptingToConnect)
+            else if (PrinterConnectionAndCommunication.Instance.CommunicationState != PrinterConnectionAndCommunication.CommunicationStates.AttemptingToConnect)
             {
                 onConnectionFailed();
             }
@@ -268,7 +268,7 @@ namespace MatterHackers.MatterControl.PrinterControls.PrinterConnections
                 printerComPortError.TextColor = ActiveTheme.Instance.PrimaryTextColor;
 
                 ActivePrinterProfile.Instance.ActivePrinter = this.ActivePrinter;
-                PrinterCommunication.Instance.ConnectToActivePrinter();
+                PrinterConnectionAndCommunication.Instance.ConnectToActivePrinter();
                 connectButton.Visible = false;
                 refreshButton.Visible = false;
             }

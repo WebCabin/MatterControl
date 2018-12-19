@@ -40,6 +40,7 @@ using MatterHackers.Agg.Image;
 using MatterHackers.MatterControl.DataStorage;
 using MatterHackers.Localizations;
 using MatterHackers.MatterControl.SlicerConfiguration;
+using MatterHackers.MatterControl.ConfigurationPage.PrintLeveling;
 
 namespace MatterHackers.MatterControl
 {
@@ -92,11 +93,10 @@ namespace MatterHackers.MatterControl
             textImageButtonFactory.FixedHeight = 30;
 
             // put in the movement edit controls
-            Vector2 probeBackCenter = ActiveSliceSettings.Instance.GetPrintLevelPositionToSample(0);
-
-            positions[0] = ActivePrinterProfile.Instance.GetPrintLevelingMeasuredPosition(0);
-            positions[1] = ActivePrinterProfile.Instance.GetPrintLevelingMeasuredPosition(1);
-            positions[2] = ActivePrinterProfile.Instance.GetPrintLevelingMeasuredPosition(2);
+            PrintLevelingData levelingData = PrintLevelingData.GetForPrinter(ActivePrinterProfile.Instance.ActivePrinter);
+            positions[0] = levelingData.sampledPosition0;
+            positions[1] = levelingData.sampledPosition1;
+            positions[2] = levelingData.sampledPosition2;
             
             int tab_index = 0;
             for (int row = 0; row < 3; row++ )
@@ -190,19 +190,16 @@ namespace MatterHackers.MatterControl
 
         void DoSave_Click(object state)
         {
-            double[] printLevelPositions3x3 =  
-            {
-                positions[0].x, positions[0].y, positions[0].z, 
-                positions[1].x, positions[1].y, positions[1].z, 
-                positions[2].x, positions[2].y, positions[2].z, 
-            };
+            PrintLevelingData levelingData = PrintLevelingData.GetForPrinter(ActivePrinterProfile.Instance.ActivePrinter);
 
-            ActivePrinterProfile.Instance.SetPrintLevelingMeasuredPositions(printLevelPositions3x3);
+            levelingData.sampledPosition0 = positions[0];
+            levelingData.sampledPosition1 = positions[1];
+            levelingData.sampledPosition2 = positions[2];
 
-            PrintLeveling.Instance.SetPrintLevelingEquation(
-                ActivePrinterProfile.Instance.GetPrintLevelingMeasuredPosition(0),
-                ActivePrinterProfile.Instance.GetPrintLevelingMeasuredPosition(1),
-                ActivePrinterProfile.Instance.GetPrintLevelingMeasuredPosition(2),
+            PrintLevelingPlane.Instance.SetPrintLevelingEquation(
+                levelingData.sampledPosition0,
+                levelingData.sampledPosition1,
+                levelingData.sampledPosition2,
                 ActiveSliceSettings.Instance.PrintCenter);
 
             Close();
